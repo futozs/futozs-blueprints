@@ -37,6 +37,35 @@ const normalize = (raw: any): OrganizerPrefs => {
                     ? raw.chain.startScript.slice(0, 256)
                     : DEFAULT_CHAIN_CONFIG.startScript,
         },
+        groups: Array.isArray(raw.groups)
+            ? raw.groups
+                  .filter((group: any) => group && typeof group.id === 'string' && typeof group.name === 'string')
+                  .map((group: any, index: number) => ({
+                      id: group.id,
+                      name: group.name,
+                      color: typeof group.color === 'string' ? group.color : '#38bdf8',
+                      icon: typeof group.icon === 'string' ? group.icon : null,
+                      collapsed: group.collapsed === true,
+                      order: typeof group.order === 'number' ? group.order : index,
+                  }))
+            : base.groups,
+        servers:
+            raw.servers && typeof raw.servers === 'object' && !Array.isArray(raw.servers)
+                ? Object.keys(raw.servers).reduce((acc: Record<string, any>, key) => {
+                      const pref = raw.servers[key];
+                      if (!pref || typeof pref !== 'object') return acc;
+
+                      acc[key] = {
+                          group: typeof pref.group === 'string' ? pref.group : null,
+                          color: typeof pref.color === 'string' ? pref.color : null,
+                          icon: typeof pref.icon === 'string' ? pref.icon : null,
+                          imageUrl: typeof pref.imageUrl === 'string' ? pref.imageUrl : null,
+                          role: pref.role === 'primary' || pref.role === 'backup' ? pref.role : null,
+                          order: typeof pref.order === 'number' ? pref.order : 0,
+                      };
+                      return acc;
+                  }, {})
+                : base.servers,
     };
 };
 

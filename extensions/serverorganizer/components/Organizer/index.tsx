@@ -16,6 +16,7 @@ import { GroupEditModal, ServerSettingsModal } from './Modals';
 import { ChainTarget, useRestartChain } from './Redundancy/chain';
 import RestartPanel from './Redundancy/RestartPanel';
 import { ChainConfig } from './Redundancy/types';
+import OrganizerBoundary from './Boundary';
 
 const newId = () => 'g' + Math.random().toString(36).slice(2, 10);
 
@@ -52,7 +53,7 @@ const SORT_KEYS: Record<SortMode, StringKey> = {
     role: 'sortRole',
 };
 
-export default () => {
+const Organizer = () => {
     const rootAdmin = useStoreState((state: any) => state.user.data!.rootAdmin);
 
     const [servers, setServers] = useState<Server[] | null>(null);
@@ -161,7 +162,11 @@ export default () => {
     const sections = useMemo(() => {
         if (!servers || !prefs) return [];
 
-        const groups = [...prefs.groups].sort((a, b) => a.order - b.order);
+        // Vedekezo olvasas: egy hianyos vagy regi alaku rekord se dobjon kivetelt.
+        const storedGroups = Array.isArray(prefs.groups) ? prefs.groups : [];
+        const storedServers = prefs.servers && typeof prefs.servers === 'object' ? prefs.servers : {};
+
+        const groups = [...storedGroups].sort((a, b) => a.order - b.order);
         const validIds = new Set(groups.map((g) => g.id));
 
         const buckets = new Map<string | null, Server[]>();
@@ -169,7 +174,7 @@ export default () => {
         buckets.set(null, []);
 
         servers.forEach((server) => {
-            const pref = prefs.servers[server.uuid];
+            const pref = storedServers[server.uuid];
             const groupId = pref && pref.group && validIds.has(pref.group) ? pref.group : null;
             (buckets.get(groupId) as Server[]).push(server);
         });
@@ -181,7 +186,7 @@ export default () => {
         };
 
         const roleRank = (uuid: string) => {
-            const role = (prefs.servers[uuid] || {}).role;
+            const role = (storedServers[uuid] || {}).role;
             return role === 'primary' ? 0 : role === 'backup' ? 1 : 2;
         };
 
@@ -194,8 +199,8 @@ export default () => {
                 case 'role':
                     return roleRank(a.uuid) - roleRank(b.uuid) || a.name.localeCompare(b.name, 'hu');
                 default: {
-                    const ao = (prefs.servers[a.uuid] || defaultServerPref(0)).order;
-                    const bo = (prefs.servers[b.uuid] || defaultServerPref(0)).order;
+                    const ao = (storedServers[a.uuid] || defaultServerPref(0)).order;
+                    const bo = (storedServers[b.uuid] || defaultServerPref(0)).order;
                     return ao - bo;
                 }
             }
@@ -322,7 +327,7 @@ export default () => {
                 return;
             }
 
-            const ordered = [...prefs.groups].sort((a, b) => a.order - b.order).map((g) => g.id);
+            const ordered = [...(prefs.groups || [])].sort((a, b) => a.order - b.order).map((g) => g.id);
             const from = ordered.indexOf(draggingGroup);
             if (from >= 0) ordered.splice(from, 1);
 
@@ -422,7 +427,7 @@ export default () => {
     }
 
     const editingServerObject = editingServer ? servers.find((s) => s.uuid === editingServer) : null;
-    const editingGroupObject = editingGroup ? prefs.groups.find((g) => g.id === editingGroup) : null;
+    const editingGroupObject = editingGroup ? (prefs.groups || []).find((g) => g.id === editingGroup) : null;
 
     return (
         <LangProvider value={lang}>
@@ -574,7 +579,7 @@ export default () => {
                 <ServerSettingsModal
                     serverName={editingServerObject.name}
                     pref={prefFor(editingServerObject.uuid)}
-                    groups={[...prefs.groups].sort((a, b) => a.order - b.order)}
+                    groups={[...(prefs.groups || [])].sort((a, b) => a.order - b.order)}
                     onClose={() => setEditingServer(null)}
                     onSave={(pref) => {
                         persist({
@@ -624,3 +629,13 @@ export default () => {
         </LangProvider>
     );
 };
+
+/**
+ * A hatarolo garantalja, hogy egy hibas szervezo ne hagyja a felhasznalot
+ * lista nelkul - ilyenkor a panel sajat listaja jelenik meg helyette.
+ */
+export default () => (
+    <OrganizerBoundary>
+        <Organizer />
+    </OrganizerBoundary>
+);

@@ -1,4 +1,7 @@
 import type { Lang } from './i18n';
+import { ChainConfig, DEFAULT_CHAIN_CONFIG } from './Redundancy/types';
+
+export type { ChainConfig };
 
 export type ServerRole = 'primary' | 'backup' | null;
 
@@ -28,6 +31,8 @@ export interface OrganizerPrefs {
     sortMode: SortMode;
     /** null = a bongeszo nyelve alapjan */
     language: Lang | null;
+    /** A lancolt ujrainditas beallitasai (minden csoportra kozos). */
+    chain: ChainConfig;
     groups: OrganizerGroup[];
     servers: Record<string, ServerPref>;
 }
@@ -50,6 +55,7 @@ export const defaultPrefs = (): OrganizerPrefs => ({
     enabled: true,
     sortMode: 'manual',
     language: null,
+    chain: { ...DEFAULT_CHAIN_CONFIG },
     groups: [],
     servers: {},
 });

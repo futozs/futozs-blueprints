@@ -43,6 +43,12 @@ class ServerOrganizerController extends Controller
             // null = a felhasznalo nem valasztott, a bongeszo nyelve dont.
             'data.language' => ['present', 'nullable', Rule::in(['en', 'hu'])],
 
+            // Lancolt ujrainditas beallitasai.
+            'data.chain' => ['present', 'array'],
+            'data.chain.stabilitySeconds' => ['required', 'integer', 'min:5', 'max:600'],
+            'data.chain.timeoutSeconds' => ['required', 'integer', 'min:30', 'max:3600'],
+            'data.chain.startScript' => ['required', 'string', 'max:256'],
+
             'data.groups' => ['present', 'array', 'max:100'],
             'data.groups.*.id' => ['required', 'string', 'max:64'],
             'data.groups.*.name' => ['required', 'string', 'max:64'],

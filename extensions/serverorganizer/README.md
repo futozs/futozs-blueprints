@@ -16,9 +16,44 @@ overridable in the toolbar.
   URL. If the image fails to load it falls back to the icon rather than showing a broken tile.
 - **Primary / backup markers** — flag a server and get a small badge on its icon.
 - **Sort modes** — manual, by name, by status, or by role.
+- **Chained restart for redundant pairs** — one button restarts the backup first and only
+  promotes to the primary once the backup is genuinely back up. See below.
 
 The extension reuses Pterodactyl's own `ServerRow` component instead of reimplementing it, so live
 CPU / RAM / disk readings and everything else keep working exactly as before.
+
+## Chained restart
+
+Mark one server in a group as **primary** and another as **backup**, and a restart button appears on
+the group header. Pressing it restarts the backup first; the primary follows only if the backup came
+back up *and stayed up*. If the backup fails, the chain stops and the primary is never touched — the
+two are never down at the same time.
+
+Throughout, you see the live console output, the current phase, and a countdown of how long the
+server has been stable.
+
+**What counts as success:** the server must reach Pterodactyl's `running` state and then stay there
+for a configurable window (30 seconds by default). This deliberately catches the case where an app
+starts, prints that it is ready, and dies moments later — a plain "is it running" check would call
+that a success and restart your primary on top of a dead backup.
+
+**Failure detection** additionally watches the console for known signatures: failed `git pull`
+(merge conflicts, untracked files that would be overwritten), broken `package.json`, ports already in
+use, and common Node crashes. The patterns live in `components/Organizer/Redundancy/patterns.ts` —
+add your own if your stack prints something different. A missing pattern is not dangerous: the
+stability window still catches a crash. An over-broad pattern is worse, which is why the defaults
+match specific lines rather than the word "error".
+
+**Repairs.** When a `package.json` or port problem is detected, the panel offers a fix rather than
+acting on its own:
+
+- *Fix port* — rewrites the `start` script using the port **Pterodactyl itself allocated** to that
+  server, so you never type a port by hand. A copy of the file is kept first.
+- *Delete package.json* — for pull conflicts, behind an explicit second click and a warning. Only
+  useful if the file is committed in your repository, since the next pull has to restore it.
+
+A `package.json` that is not valid JSON is deliberately **never** rewritten from scratch: doing so
+would silently destroy your dependency list.
 
 ## Installing
 

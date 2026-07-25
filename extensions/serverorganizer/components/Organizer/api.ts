@@ -1,7 +1,14 @@
 import http from '@/api/http';
 import { OrganizerPrefs, defaultPrefs, PREFS_VERSION } from './types';
+import { DEFAULT_CHAIN_CONFIG } from './Redundancy/types';
 
 const ENDPOINT = '/api/client/extensions/serverorganizer/prefs';
+
+const clampNumber = (value: any, min: number, max: number, fallback: number): number => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(parsed)));
+};
 
 /**
  * A szerverrol erkezo dokumentumot osszefesuljuk az alapertelmezessel, hogy egy
@@ -19,6 +26,14 @@ const normalize = (raw: any): OrganizerPrefs => {
         enabled: typeof raw.enabled === 'boolean' ? raw.enabled : base.enabled,
         sortMode: ['manual', 'name', 'status', 'role'].includes(raw.sortMode) ? raw.sortMode : base.sortMode,
         language: raw.language === 'hu' || raw.language === 'en' ? raw.language : null,
+        chain: {
+            stabilitySeconds: clampNumber(raw.chain?.stabilitySeconds, 5, 600, DEFAULT_CHAIN_CONFIG.stabilitySeconds),
+            timeoutSeconds: clampNumber(raw.chain?.timeoutSeconds, 30, 3600, DEFAULT_CHAIN_CONFIG.timeoutSeconds),
+            startScript:
+                typeof raw.chain?.startScript === 'string' && raw.chain.startScript.trim()
+                    ? raw.chain.startScript.slice(0, 256)
+                    : DEFAULT_CHAIN_CONFIG.startScript,
+        },
         groups: Array.isArray(raw.groups)
             ? raw.groups
                   .filter((g: any) => g && typeof g.id === 'string' && typeof g.name === 'string')

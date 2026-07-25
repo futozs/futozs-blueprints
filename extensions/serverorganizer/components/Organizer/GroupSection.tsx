@@ -1,6 +1,6 @@
 import React from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faChevronDown, faChevronRight, faGripVertical, faPen } from '@fortawesome/free-solid-svg-icons';
+import { faChevronDown, faChevronRight, faGripVertical, faPen, faSync } from '@fortawesome/free-solid-svg-icons';
 import { Server } from '@/api/server/getServer';
 import { OrganizerGroup, ServerPref } from './types';
 import { resolveIcon } from './icons';
@@ -21,6 +21,9 @@ interface Props {
 
     onToggleCollapse: () => void;
     onEditGroup: () => void;
+    /** Van-e a csoportban elsodleges vagy backup szerep kiosztva. */
+    canRestartChain: boolean;
+    onRestartChain: () => void;
     onEditServer: (uuid: string) => void;
 
     onServerDragStart: (uuid: string) => void;
@@ -46,6 +49,8 @@ export default ({
     draggingGroup,
     onToggleCollapse,
     onEditGroup,
+    canRestartChain,
+    onRestartChain,
     onEditServer,
     onServerDragStart,
     onServerDragEnd,
@@ -156,6 +161,24 @@ export default ({
                         </span>
                         <span style={{ color: C.faint, fontSize: '0.7rem' }}>{servers.length}</span>
                     </button>
+
+                    {group && canRestartChain && (
+                        <button
+                            type={'button'}
+                            onClick={onRestartChain}
+                            title={t('restartGroup')}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: C.accent,
+                                cursor: 'pointer',
+                                padding: '0 0.2rem',
+                                fontSize: '0.8rem',
+                            }}
+                        >
+                            <FontAwesomeIcon icon={faSync} />
+                        </button>
+                    )}
 
                     {editMode && group && (
                         <button

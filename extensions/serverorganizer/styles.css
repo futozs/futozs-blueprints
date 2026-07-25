@@ -52,3 +52,35 @@ body.so-active [data-so-root] ~ * {
     display: none;
   }
 }
+
+/*
+ * Hosszu szervernev kezelese.
+ *
+ * A Pterodactyl sorai 'overflow: hidden' + fix szelessegu ikon mellett rendezik
+ * a tartalmat, ezert egy hosszu nev osszenyomja a tobbi oszlopot. Itt engedjuk,
+ * hogy a nev tordeljon es a sor inkabb magassagban nojon.
+ *
+ * Csak a szervezo sorait erintjuk (.so-row-wrapper), a panel tobbi reszet nem.
+ * A horgony a Link href-je, ami stabil - az emotion osztalynevek nem azok.
+ */
+
+.so-row-wrapper a[href^='/server/'] {
+    overflow: visible;
+}
+
+/* A nevet tartalmazo oszlop zsugorodhasson a rendelkezesre allo helyre. */
+.so-row-wrapper a[href^='/server/'] > div:first-child,
+.so-row-wrapper a[href^='/server/'] > div:first-child > div:last-child {
+    min-width: 0;
+}
+
+/* Az ikon ne nyomodjon ossze a hosszu nev miatt. */
+.so-row-wrapper a[href^='/server/'] .icon {
+    flex-shrink: 0;
+}
+
+/* Hosszu, szokoz nelkuli nev is tordeljon, ahelyett hogy kilogna. */
+.so-row-wrapper a[href^='/server/'] p {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}

@@ -13,6 +13,9 @@ import { C, btn } from './ui';
 import { Lang, LANGUAGES, LangProvider, STRINGS, StringKey, detectLang } from './i18n';
 import GroupSection from './GroupSection';
 import { GroupEditModal, ServerSettingsModal } from './Modals';
+import { ChainTarget, useRestartChain } from './Redundancy/chain';
+import RestartPanel from './Redundancy/RestartPanel';
+import { ChainConfig } from './Redundancy/types';
 
 const newId = () => 'g' + Math.random().toString(36).slice(2, 10);
 
@@ -66,6 +69,9 @@ export default () => {
     const [draggingServer, setDraggingServer] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ uuid: string; position: 'before' | 'after' } | null>(null);
     const [draggingGroup, setDraggingGroup] = useState<string | null>(null);
+    const [chainGroupId, setChainGroupId] = useState<string | null>(null);
+
+    const chain = useRestartChain();
 
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -206,6 +212,33 @@ export default () => {
 
         return result;
     }, [servers, prefs]);
+
+    /**
+     * A lanc sorrendje kotott: eloszor a backup, es csak siker utan a primary.
+     * Igy sosem fordulhat elo, hogy egyszerre mindketto all.
+     */
+    const chainTargets = useMemo((): ChainTarget[] => {
+        if (!chainGroupId || !prefs) return [];
+
+        const section = sections.find((entry) => entry.group && entry.group.id === chainGroupId);
+        if (!section) return [];
+
+        const roleOf = (uuid: string) => (prefs.servers[uuid] || {}).role;
+        const backup = section.servers.find((server) => roleOf(server.uuid) === 'backup');
+        const primary = section.servers.find((server) => roleOf(server.uuid) === 'primary');
+
+        const targets: ChainTarget[] = [];
+        if (backup) targets.push({ server: backup, role: 'backup' });
+        if (primary) targets.push({ server: primary, role: 'primary' });
+
+        return targets;
+    }, [chainGroupId, sections, prefs]);
+
+    const groupHasRoles = useCallback(
+        (groupServers: Server[]): boolean =>
+            !!prefs && groupServers.some((server) => !!(prefs.servers[server.uuid] || {}).role),
+        [prefs]
+    );
 
     const membersOf = useCallback(
         (groupId: string | null): string[] => {
@@ -513,6 +546,8 @@ export default () => {
                         draggingGroup={draggingGroup}
                         onToggleCollapse={() => group && toggleCollapse(group.id)}
                         onEditGroup={() => group && setEditingGroup(group.id)}
+                        canRestartChain={!!group && groupHasRoles(groupServers)}
+                        onRestartChain={() => group && setChainGroupId(group.id)}
                         onEditServer={(uuid) => setEditingServer(uuid)}
                         onServerDragStart={(uuid) => setDraggingServer(uuid)}
                         onServerDragEnd={finishServerDrag}
@@ -547,6 +582,26 @@ export default () => {
                             servers: { ...prefs.servers, [editingServerObject.uuid]: pref },
                         });
                         setEditingServer(null);
+                    }}
+                />
+            )}
+
+            {chainGroupId && (
+                <RestartPanel
+                    state={chain.state}
+                    config={prefs.chain}
+                    servers={servers}
+                    targets={chainTargets}
+                    onStart={() => chain.start(chainTargets, prefs.chain)}
+                    onConfigChange={(next: ChainConfig) => persist({ ...prefs, chain: next })}
+                    onAbort={chain.abort}
+                    onRetry={() => {
+                        chain.reset();
+                        // A reset utan a panel visszater a terv-nezetbe, ahonnan ujra indithato.
+                    }}
+                    onClose={() => {
+                        chain.reset();
+                        setChainGroupId(null);
                     }}
                 />
             )}

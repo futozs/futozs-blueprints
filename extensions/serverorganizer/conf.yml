@@ -1,9 +1,9 @@
 info:
   name: "Server Organizer"
   identifier: "serverorganizer"
-  description: "Csoportositsd, szinezd, ikonozd es rendezd a szervereidet a dashboardon. Primary/backup jeloles, drag & drop sorrend, osszecsukhato csoportok."
+  description: "Csoportositsd, szinezd es rendezd a szervereidet, es inditsd ujra a redundans parokat egyetlen gombbal - eloszor a backup, utana a primary, elo visszajelzessel."
   flags: ""
-  version: "1.0.0"
+  version: "2.0.0"
   target: "beta-2026-06"
   author: "Futó Zsombor"
   icon: ""

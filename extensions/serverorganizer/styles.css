@@ -1,0 +1,54 @@
+/*
+ * Server Organizer - globalis stilusok
+ *
+ * A fo feladat: amikor a szervezo aktiv, elrejteni a Pterodactyl alapertelmezett
+ * szerverlistajat. A szervezo komponens a Blueprint 'Dashboard.Serverlist.BeforeContent'
+ * pontjara kerul, ezert a core lista pontosan a testvere - igy az altalanos testver
+ * szelektorral megbizhatoan celozhato, emotion hash-elt osztalynevek nelkul is.
+ */
+
+body.so-active [data-so-root] ~ * {
+  display: none !important;
+}
+
+/* Drag & drop kozbeni visszajelzes */
+.so-dragging {
+  opacity: 0.4;
+}
+
+.so-drop-before {
+  box-shadow: 0 -3px 0 0 #38bdf8;
+}
+
+.so-drop-after {
+  box-shadow: 0 3px 0 0 #38bdf8;
+}
+
+.so-drop-into {
+  outline: 2px dashed #38bdf8;
+  outline-offset: 2px;
+}
+
+/* A szervezo altal huzhatova tett elemek */
+.so-draggable {
+  cursor: grab;
+}
+
+.so-draggable:active {
+  cursor: grabbing;
+}
+
+/*
+ * A core ServerRow-t sajat kerettel egeszitjuk ki. A sor sajat margojat
+ * kinullazzuk, mert a csoport-konteneren belul mi kezeljuk a tavolsagokat.
+ */
+.so-row-wrapper > * {
+  margin-top: 0 !important;
+}
+
+/* Az ikonsav ne toltse ki a teljes magassagot mobilon */
+@media (max-width: 640px) {
+  .so-accent {
+    display: none;
+  }
+}

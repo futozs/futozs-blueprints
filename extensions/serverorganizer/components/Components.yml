@@ -1,0 +1,6 @@
+# A szervezo a szerverlista ele kerul, es onnan veszi at a teljes lista
+# rendereleset. Az alapertelmezett listat a styles.css rejti el.
+
+Dashboard:
+  Serverlist:
+    BeforeContent: "Organizer/index"

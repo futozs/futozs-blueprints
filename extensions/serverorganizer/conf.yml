@@ -1,0 +1,37 @@
+info:
+  name: "Server Organizer"
+  identifier: "serverorganizer"
+  description: "Csoportositsd, szinezd, ikonozd es rendezd a szervereidet a dashboardon. Primary/backup jeloles, drag & drop sorrend, osszecsukhato csoportok."
+  flags: ""
+  version: "1.0.0"
+  target: "beta-2026-06"
+  author: "Futó Zsombor"
+  icon: ""
+  website: ""
+
+admin:
+  view: "admin.blade.php"
+  controller: ""
+  css: ""
+  wrapper: ""
+
+dashboard:
+  css: "styles.css"
+  wrapper: ""
+  components: "components"
+
+data:
+  directory: ""
+  public: ""
+  console: ""
+
+requests:
+  views: ""
+  app: "app"
+  routers:
+    application: ""
+    client: "client.php"
+    web: ""
+
+database:
+  migrations: "migrations"

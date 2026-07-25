@@ -1,0 +1,51 @@
+name: Release extension
+
+# Tags are shaped '<extension>-v<version>', e.g. serverorganizer-v1.0.1.
+# The extension name is read from the tag, so only that one gets packaged.
+on:
+  push:
+    tags:
+      - '*-v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve extension from tag
+        id: resolve
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          NAME="${TAG%-v*}"
+          VERSION="${TAG##*-v}"
+
+          if [ ! -d "extensions/${NAME}" ]; then
+            echo "::error::Tag '${TAG}' refers to extensions/${NAME}, which does not exist."
+            exit 1
+          fi
+
+          CONF_VERSION=$(grep -oE 'version: *"[^"]+"' "extensions/${NAME}/conf.yml" | head -1 | cut -d'"' -f2)
+          if [ "$CONF_VERSION" != "$VERSION" ]; then
+            echo "::error::Tag says v${VERSION} but extensions/${NAME}/conf.yml says ${CONF_VERSION}. Bump conf.yml first."
+            exit 1
+          fi
+
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${NAME} v${VERSION}"
+
+      - name: Build
+        run: |
+          chmod +x scripts/*.sh
+          scripts/build.sh "${{ steps.resolve.outputs.name }}" dist
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "${{ steps.resolve.outputs.name }} v${{ steps.resolve.outputs.version }}"
+          files: dist/${{ steps.resolve.outputs.name }}.blueprint
+          generate_release_notes: true

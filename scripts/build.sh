@@ -34,6 +34,9 @@ echo "==> Checking for Blueprint placeholder collisions"
 
 echo "==> Packaging $NAME"
 mkdir -p "$OUT_DIR"
+# Feloldjuk abszolut utra, MIELOTT belepnenk a kiegeszito konyvtaraba - kulonben
+# egy relativ kimeneti ut (pl. 'dist') a cd utan mar mashova mutatna.
+OUT_DIR="$(cd "$OUT_DIR" && pwd)" || { echo "ERROR: cannot resolve output directory"; exit 1; }
 OUT="$OUT_DIR/${NAME}.blueprint"
 rm -f "$OUT"
 

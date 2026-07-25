@@ -18,7 +18,7 @@ import { Modal } from '../Modals';
 import { C, btn, inputStyle } from '../ui';
 import { useT } from '../i18n';
 import { ChainConfig, ChainState, ConsoleLine, StepPhase, StepState } from './types';
-import { LineLevel } from './patterns';
+import { LineLevel, PROGRESS_MARKERS } from './patterns';
 import { FixResult, deletePackageJson, patchStartScript, resolvePort } from './fixPort';
 import { parseAnsi } from './ansi';
 
@@ -30,7 +30,6 @@ const PHASE_KEYS: Record<StepPhase, string> = {
     sending: 'phaseSending',
     stopping: 'phaseStopping',
     starting: 'phaseStarting',
-    stabilising: 'phaseStabilising',
     done: 'phaseDone',
     failed: 'phaseFailed',
     skipped: 'phaseSkipped',
@@ -47,6 +46,7 @@ const phaseColour = (phase: StepPhase): string => {
 /** A sor sajat besorolasa - ez ul RA az ANSI szinekre, es felul is irja azokat. */
 const LEVEL_STYLE: Record<LineLevel, CSSProperties> = {
     normal: {},
+    progress: { color: '#7dd3fc' },
     ready: { color: '#4ade80', fontWeight: 600 },
     notice: { color: '#fbbf24' },
     error: { color: '#f87171' },
@@ -54,9 +54,58 @@ const LEVEL_STYLE: Record<LineLevel, CSSProperties> = {
 
 const LEVEL_ACCENT: Record<LineLevel, string> = {
     normal: 'transparent',
+    progress: '#38bdf8',
     ready: '#4ade80',
     notice: '#fbbf24',
     error: '#f87171',
+};
+
+/**
+ * A build lepesei, ahogy tenylegesen megtortentek. Szandekosan csak azt
+ * mutatjuk, amit mar lattunk a konzolon - igy barmilyen stackkel helyes marad,
+ * nem csak Next.js + Prisma felallassal.
+ */
+const ProgressList = ({ progress, running }: { progress: string[]; running: boolean }) => {
+    const t = useT();
+
+    const reached = PROGRESS_MARKERS.filter((marker) => progress.indexOf(marker.key) !== -1);
+    const isReady = progress.indexOf('ready') !== -1;
+
+    if (reached.length === 0 && !isReady) {
+        return null;
+    }
+
+    return (
+        <div style={{ marginTop: '0.55rem', display: 'flex', flexWrap: 'wrap', gap: '0.3rem 0.9rem' }}>
+            {reached.map((marker) => (
+                <span
+                    key={marker.key}
+                    style={{ fontSize: '0.72rem', color: '#7dd3fc', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                >
+                    <FontAwesomeIcon icon={faCheck} style={{ fontSize: '0.62rem' }} />
+                    {t(marker.labelKey as any)}
+                </span>
+            ))}
+
+            {isReady && (
+                <span
+                    style={{ fontSize: '0.72rem', color: '#34d399', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 600 }}
+                >
+                    <FontAwesomeIcon icon={faCheck} style={{ fontSize: '0.62rem' }} />
+                    {t('stepReady')}
+                </span>
+            )}
+
+            {running && !isReady && (
+                <span
+                    style={{ fontSize: '0.72rem', color: C.faint, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                >
+                    <FontAwesomeIcon icon={faSpinner} spin style={{ fontSize: '0.62rem' }} />
+                    {t('buildRunning')}
+                </span>
+            )}
+        </div>
+    );
 };
 
 const PhaseIcon = ({ phase }: { phase: StepPhase }) => {
@@ -243,33 +292,7 @@ const StepBlock = ({ step, active, config }: { step: StepState; active: boolean;
                 </span>
             </div>
 
-            {step.phase === 'stabilising' && (
-                <div style={{ marginTop: '0.5rem' }}>
-                    <div
-                        style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            fontSize: '0.68rem',
-                            color: C.faint,
-                        }}
-                    >
-                        <span>{t('stabilityProgress')}</span>
-                        <span>
-                            {step.stableFor}s / {config.stabilitySeconds}s
-                        </span>
-                    </div>
-                    <div style={{ height: 5, background: C.deep, borderRadius: 3, marginTop: 4, overflow: 'hidden' }}>
-                        <div
-                            style={{
-                                height: '100%',
-                                width: `${Math.min(100, (step.stableFor / config.stabilitySeconds) * 100)}%`,
-                                background: colour,
-                                transition: 'width 400ms linear',
-                            }}
-                        />
-                    </div>
-                </div>
-            )}
+            <ProgressList progress={step.progress} running={active && step.phase !== 'failed'} />
 
             {showConsole && <ConsoleView lines={step.lines} label={step.name} />}
         </div>
@@ -289,7 +312,9 @@ const FailureBox = ({ step, server, config }: { step: StepState; server: Server 
     const offerDelete = step.failureKind === 'pull' || step.failureKind === 'package';
 
     const reasonKey =
-        step.failureKind === 'timeout'
+        step.failureKind === 'build'
+            ? 'failBuild'
+            : step.failureKind === 'timeout'
             ? 'failTimeout'
             : step.failureKind === 'crash'
             ? 'failCrash'
@@ -431,26 +456,6 @@ export default ({
     /* ---------------------------------------------------- indulas elotti terv */
 
     if (!started) {
-        const numberField = (
-            label: string,
-            value: number,
-            min: number,
-            max: number,
-            apply: (next: number) => void
-        ) => (
-            <label style={{ display: 'block', marginBottom: '0.6rem' }}>
-                <div style={{ fontSize: '0.7rem', color: C.faint, marginBottom: '0.25rem' }}>{label}</div>
-                <input
-                    type={'number'}
-                    value={value}
-                    min={min}
-                    max={max}
-                    onChange={(e) => apply(Number(e.target.value))}
-                    style={{ ...inputStyle, maxWidth: 140 }}
-                />
-            </label>
-        );
-
         return (
             <Modal
                 title={t('restartChain')}
@@ -499,12 +504,21 @@ export default ({
 
                         <div style={{ height: 1, background: C.border, margin: '0.9rem 0' }} />
 
-                        {numberField(t('stabilityLabel'), config.stabilitySeconds, 5, 600, (next) =>
-                            onConfigChange({ ...config, stabilitySeconds: next })
-                        )}
-                        {numberField(t('timeoutLabel'), config.timeoutSeconds, 30, 3600, (next) =>
-                            onConfigChange({ ...config, timeoutSeconds: next })
-                        )}
+                        <label style={{ display: 'block', marginBottom: '0.75rem' }}>
+                            <div style={{ fontSize: '0.7rem', color: C.faint, marginBottom: '0.25rem' }}>
+                                {t('readyPatternLabel')}
+                            </div>
+                            <input
+                                type={'text'}
+                                value={config.readyPattern}
+                                maxLength={256}
+                                onChange={(e) => onConfigChange({ ...config, readyPattern: e.target.value })}
+                                style={{ ...inputStyle, fontFamily: MONO, fontSize: '0.78rem' }}
+                            />
+                            <div style={{ fontSize: '0.68rem', color: C.faint, marginTop: '0.3rem' }}>
+                                {t('readyPatternHelp')}
+                            </div>
+                        </label>
 
                         <label style={{ display: 'block' }}>
                             <div style={{ fontSize: '0.7rem', color: C.faint, marginBottom: '0.25rem' }}>

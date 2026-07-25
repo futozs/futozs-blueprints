@@ -32,29 +32,42 @@ two are never down at the same time.
 Throughout, you see the live console output, the current phase, and a countdown of how long the
 server has been stable.
 
-**What counts as success:** the server must reach Pterodactyl's `running` state and then stay there
-for a configurable window (30 seconds by default). This deliberately catches the case where an app
-starts, prints that it is ready, and dies moments later — a plain "is it running" check would call
-that a success and restart your primary on top of a dead backup.
+**What counts as success: the application says so.** There is no timer to configure. The chain waits
+for the line that means "I am serving" — for Next.js that is `Ready in ...`, printed at the end of
+`next start`. A production build can take seconds or many minutes; guessing a number would be wrong
+either way, so nothing guesses.
+
+The matched line is configurable (it is a regular expression), and the default already covers Next.js
+and common Node servers.
+
+Two traps this avoids:
+
+- Wings replays recent console history when you connect. A stale `Ready in` from the *previous* start
+  would otherwise register as instant success, so ready lines are only accepted after the server has
+  actually been seen going down or starting.
+- The container reports `running` long before a build finishes. Container state alone means nothing
+  here; only the application's own output does.
+
+**Live build progress.** Recognised stages are ticked off as they appear in the console — git pull,
+dependencies, Prisma client, migrations, build started, compiled, TypeScript, static pages, server
+starting, ready. Only stages actually observed are shown, so the display stays honest on any stack.
 
 **Failure detection.** Console patterns are split into two kinds, and the distinction matters:
 
-- **Halting patterns** stop the chain. Only lines that are unambiguously fatal *and* actionable
-  qualify: a git pull that actually stopped, machine-readable npm errors like `EJSONPARSE`, a port
-  already in use, heap exhaustion.
-- **Notices** are highlighted in the console but stop nothing — `Cannot find module`, stack trace
-  lines, warnings. These are routine noise in plenty of setups.
+- **Halting patterns** stop the chain: a build that actually failed (`Failed to compile`,
+  `Build error occurred`, TypeScript errors), a git pull that stopped, machine-readable npm errors
+  like `EJSONPARSE`, a port already in use, heap exhaustion.
+- **Notices** are highlighted but stop nothing — `Cannot find module`, stack traces, warnings.
+  These are routine noise in plenty of setups.
 
-If an application really does crash, it is **not** pattern matching that catches it — the server
-drops out of `running` and the stability window fails the step. The patterns only explain *why*;
-they never decide *whether* something broke. That is why a missing pattern is harmless while an
-over-broad one is not: it halts a healthy deployment over a line that meant nothing.
+If the application dies outright, that is caught by the container dropping out of `running`, not by
+pattern matching. The patterns explain *why* a step failed; they never decide *whether* it did. A
+missing pattern is harmless; an over-broad one halts a healthy deployment.
 
-The lists live in `components/Organizer/Redundancy/patterns.ts` — move a line between the two
-categories if your stack disagrees.
+The lists live in `components/Organizer/Redundancy/patterns.ts`.
 
-**Console.** Output is rendered with full ANSI colour support, highlighted by line category, and
-follows the tail automatically until you scroll up.
+**Console.** Output is rendered with full ANSI colour, highlighted by line category, and follows the
+tail until you scroll up.
 
 **Repairs.** When a `package.json` or port problem is detected, the panel offers a fix rather than
 acting on its own:

@@ -1,4 +1,4 @@
-import { FailureKind, LineLevel } from './patterns';
+import { DEFAULT_READY_PATTERN, FailureKind, LineLevel } from './patterns';
 
 export interface ConsoleLine {
     text: string;
@@ -10,8 +10,7 @@ export type StepPhase =
     | 'connecting' // websocket nyitasa
     | 'sending' // restart jel kikuldve
     | 'stopping' // leall
-    | 'starting' // indul
-    | 'stabilising' // fut, a stabilitasi ablakot varjuk ki
+    | 'starting' // indul, fut a build
     | 'done'
     | 'failed'
     | 'skipped'; // egy korabbi lepes elbukott, ezert ide el sem jutottunk
@@ -22,14 +21,12 @@ export interface StepState {
     name: string;
     role: 'primary' | 'backup';
     phase: StepPhase;
-    /** Hany masodperce fut folyamatosan. */
-    stableFor: number;
-    /** Mennyi ideje tart az egesz lepes. */
+    /** Mennyi ideje tart a lepes (csak kijelzesre, nem dont semmirol). */
     elapsed: number;
-    /** A konzol utolso sorai - ezt latja a felhasznalo elesben. */
+    /** A konzol sorai - ezt latja a felhasznalo elesben. */
     lines: ConsoleLine[];
-    /** Latta-e mar az app sajat "elindultam" uzenetet. */
-    appReady: boolean;
+    /** A mar elert build-lepesek kulcsai (PROGRESS_MARKERS). */
+    progress: string[];
     failureKind: FailureKind | 'timeout' | 'offline' | 'aborted' | 'api' | null;
     /** A konkret sor vagy hibauzenet, ami miatt elbukott. */
     failureDetail: string | null;
@@ -39,16 +36,21 @@ export interface ChainState {
     running: boolean;
     startedAt: number | null;
     steps: StepState[];
-    /** Az eppen futo lepes indexe, vagy null. */
     activeIndex: number | null;
     finishedAt: number | null;
     aborted: boolean;
 }
 
 export interface ChainConfig {
-    /** Hany masodpercig kell folyamatosan futnia, hogy sikeresnek szamitson. */
-    stabilitySeconds: number;
-    /** Ennyi ido utan feladjuk az adott lepest. */
+    /**
+     * Az a konzolsor, ami azt jelenti "elindultam es fogadom a kereseket".
+     * Regularis kifejezes. Nincs idozites: ez dont a sikerrol.
+     */
+    readyPattern: string;
+    /**
+     * Vegso biztonsagi hatar, hogy egy beragadt build ne varakoztasson orokke.
+     * Nem finomhangolasra valo - bo alapertekkel indul.
+     */
     timeoutSeconds: number;
     /**
      * A package.json "start" scriptje, ha automatikusan javitjuk.
@@ -58,8 +60,8 @@ export interface ChainConfig {
 }
 
 export const DEFAULT_CHAIN_CONFIG: ChainConfig = {
-    stabilitySeconds: 30,
-    timeoutSeconds: 300,
+    readyPattern: DEFAULT_READY_PATTERN,
+    timeoutSeconds: 1800,
     startScript: 'next start -p %PORT%',
 };
 

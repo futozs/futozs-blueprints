@@ -3,22 +3,16 @@ import { stripAnsi } from './ansi';
 /**
  * Konzol-mintak.
  *
- * KET KATEGORIA VAN, es a kulonbseg szandekos:
+ * A siker eldontese NEM idozitessel tortenik, hanem abbol, amit az alkalmazas
+ * kiir magarol. Egy Next.js build percekig tarthat, es a vegen egyertelmuen
+ * megmondja, hogy fut-e ("Ready in ..."). Ezt olvassuk.
  *
- *  - FAILURE: megallitja a lancot. Csak olyan sorok kerulhetnek ide, amelyek
- *    egyertelmuen vegzetesek ES amelyekre van ertelmes valaszunk. Egy tul tag
- *    minta itt sokkal rosszabb, mint egy hianyzo: hamisan leallitja az egesz
- *    folyamatot egy artalmatlan sor miatt.
- *
- *  - NOTICE: csak kiemeli a sort a konzolon. Semmit nem allit meg.
- *
- * Ha egy alkalmazas tenyleg osszeomlik, azt NEM a mintaillesztes fogja meg,
- * hanem a stabilitasi ablak: a szerver kiesik 'running' allapotbol, es a lepes
- * elbukik. A mintak csak arra valok, hogy MEGMONDJAK MIERT - nem arra hogy
- * eldontsek, tortent-e baj.
+ * Ket kategoria van, es a kulonbseg szandekos:
+ *  - FAILURE: megallitja a lancot. Csak egyertelmuen vegzetes sorok.
+ *  - NOTICE:  csak kiemeli a sort. Semmit nem allit meg.
  */
 
-export type FailureKind = 'package' | 'pull' | 'port' | 'crash';
+export type FailureKind = 'package' | 'pull' | 'port' | 'crash' | 'build';
 
 export interface FailurePattern {
     kind: FailureKind;
@@ -26,6 +20,12 @@ export interface FailurePattern {
 }
 
 export const FAILURE_PATTERNS: FailurePattern[] = [
+    /* --- a build maga hasalt el --- */
+    { kind: 'build', match: /Failed to compile/i },
+    { kind: 'build', match: /Build error occurred/i },
+    { kind: 'build', match: /^\s*Type error:/i },
+    { kind: 'build', match: /error TS\d+:/i },
+
     /* --- package.json: konkret, gepi hibakodok --- */
     { kind: 'package', match: /npm ERR!\s+code\s+EJSONPARSE/i },
     { kind: 'package', match: /npm ERR!\s+JSON\.parse/i },
@@ -50,19 +50,15 @@ export const FAILURE_PATTERNS: FailurePattern[] = [
     { kind: 'crash', match: /FATAL ERROR:.*JavaScript heap out of memory/i },
 ];
 
-/**
- * Kiemeljuk, de NEM allitjuk meg tole a lancot.
- *
- * A 'Cannot find module' szandekosan itt van: sok felallasban teljesen normalis
- * uzemi zaj (pl. opcionalis modul betoltesi kiserlete), es korabban emiatt allt
- * meg feleslegesen az egesz folyamat.
- */
 export interface NoticePattern {
     match: RegExp;
-    /** 'error' = piros kiemeles, 'notice' = borostyan */
     level: 'error' | 'notice';
 }
 
+/**
+ * Kiemeljuk, de NEM allitjuk meg tole a lancot. A 'Cannot find module' azert van
+ * itt, mert sok felallasban teljesen normalis uzemi zaj.
+ */
 export const NOTICE_PATTERNS: NoticePattern[] = [
     { match: /Cannot find module/i, level: 'notice' },
     { match: /UnhandledPromiseRejection/i, level: 'notice' },
@@ -72,42 +68,82 @@ export const NOTICE_PATTERNS: NoticePattern[] = [
     { match: /^\s*ReferenceError:/i, level: 'error' },
     { match: /npm ERR!/i, level: 'error' },
     { match: /npm WARN/i, level: 'notice' },
-    { match: /\bwarn(ing)?\b/i, level: 'notice' },
-    { match: /^\s*at\s+\S+\s+\(/i, level: 'notice' }, // stack trace sorok
+    { match: /Update available/i, level: 'notice' },
+    { match: /^\s*at\s+\S+\s+\(/i, level: 'notice' },
 ];
-
-export const READY_PATTERNS: RegExp[] = [
-    /ready\s+-\s+started server on/i,
-    /Ready in \d+/i,
-    /started server on .*, url:/i,
-    /Listening on port/i,
-    /server started/i,
-];
-
-export type LineLevel = 'normal' | 'notice' | 'error' | 'ready';
 
 /**
- * Egy nyers konzolsor besorolasa. Mindig a csupasz szovegen dolgozunk, hogy a
- * szinkodok ne torjek szet a keresett kifejezeseket.
+ * A build/indulas lepesei, ahogy a konzolon megjelennek. Ezt mutatjuk a
+ * felhasznalonak elo checklistakent - igy latszik hol tart, ido helyett.
+ *
+ * A sorrend szamit: a felulet ebben a sorrendben jeleniti meg oket.
  */
-export const classifyLine = (
-    raw: string
-): { level: LineLevel; failure: FailurePattern | null; ready: boolean } => {
+export interface ProgressMarker {
+    key: string;
+    labelKey: string;
+    match: RegExp;
+}
+
+export const PROGRESS_MARKERS: ProgressMarker[] = [
+    { key: 'pull', labelKey: 'stepPull', match: /Already up to date|Fast-forward|Updating [0-9a-f]{7}|files? changed/i },
+    { key: 'install', labelKey: 'stepInstall', match: /added \d+ packages|up to date, audited|Installing dependencies/i },
+    { key: 'prisma', labelKey: 'stepPrisma', match: /Generated Prisma Client/i },
+    { key: 'migrate', labelKey: 'stepMigrate', match: /No pending migrations to apply|migrations? (have been )?applied|Database is now in sync/i },
+    { key: 'building', labelKey: 'stepBuilding', match: /Creating an optimized production build/i },
+    { key: 'compiled', labelKey: 'stepCompiled', match: /Compiled successfully/i },
+    { key: 'types', labelKey: 'stepTypes', match: /Finished TypeScript/i },
+    { key: 'pages', labelKey: 'stepPages', match: /Generating static pages/i },
+    // Csak a tenyleges inditas: a "Next.js x.y.z" banner a build alatt is megjelenik,
+    // ezert az nem jo jelzes arra hogy mar a szerver indul.
+    { key: 'starting', labelKey: 'stepStarting', match: /^\s*>\s*next start|^\s*-\s*Local:\s+http/i },
+];
+
+/**
+ * Alapertelmezett "keszen vagyok" minta. A Next.js a `next start` vegen irja ki,
+ * es ez az a pillanat, amikor a szerver tenylegesen fogadja a kereseket.
+ */
+export const DEFAULT_READY_PATTERN = 'Ready in|ready - started server on|Listening on port|server started';
+
+export const compileReadyPattern = (source: string): RegExp => {
+    try {
+        return new RegExp(source, 'i');
+    } catch (error) {
+        // Hibas sajat minta eseten inkabb az alapertelmezettre esunk vissza,
+        // mint hogy a lanc soha ne fejezodjon be.
+        return new RegExp(DEFAULT_READY_PATTERN, 'i');
+    }
+};
+
+export type LineLevel = 'normal' | 'notice' | 'error' | 'ready' | 'progress';
+
+export interface LineVerdict {
+    level: LineLevel;
+    failure: FailurePattern | null;
+    ready: boolean;
+    progressKey: string | null;
+}
+
+export const classifyLine = (raw: string, readyPattern: RegExp): LineVerdict => {
     const text = stripAnsi(raw);
 
     const failure = FAILURE_PATTERNS.find((pattern) => pattern.match.test(text)) || null;
     if (failure) {
-        return { level: 'error', failure, ready: false };
+        return { level: 'error', failure, ready: false, progressKey: null };
     }
 
-    if (READY_PATTERNS.some((pattern) => pattern.test(text))) {
-        return { level: 'ready', failure: null, ready: true };
+    if (readyPattern.test(text)) {
+        return { level: 'ready', failure: null, ready: true, progressKey: 'ready' };
+    }
+
+    const progress = PROGRESS_MARKERS.find((marker) => marker.match.test(text));
+    if (progress) {
+        return { level: 'progress', failure: null, ready: false, progressKey: progress.key };
     }
 
     const notice = NOTICE_PATTERNS.find((pattern) => pattern.match.test(text));
     if (notice) {
-        return { level: notice.level, failure: null, ready: false };
+        return { level: notice.level, failure: null, ready: false, progressKey: null };
     }
 
-    return { level: 'normal', failure: null, ready: false };
+    return { level: 'normal', failure: null, ready: false, progressKey: null };
 };

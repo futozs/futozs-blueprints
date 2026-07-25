@@ -79,7 +79,6 @@ const en = {
     retry: 'Retry',
     close: 'Close',
     elapsed: 'Elapsed',
-    stabilityProgress: 'Staying up',
     appReported: 'app reported ready',
 
     phasePending: 'waiting',
@@ -87,7 +86,6 @@ const en = {
     phaseSending: 'restarting',
     phaseStopping: 'shutting down',
     phaseStarting: 'starting',
-    phaseStabilising: 'checking stability',
     phaseDone: 'done',
     phaseFailed: 'failed',
     phaseSkipped: 'skipped',
@@ -115,13 +113,26 @@ const en = {
 
     startChain: 'Start restart chain',
     planTitle: 'What will happen, in order:',
-    stabilityLabel: 'Must stay up for (seconds)',
-    timeoutLabel: 'Give up after (seconds)',
     startScriptLabel: 'Start script used when fixing package.json',
     startScriptHelp: '%PORT% is replaced with the port Pterodactyl allocated to that server — you never type it yourself.',
 
     consoleWaiting: 'Waiting for console output...',
     jumpToBottom: 'Jump to latest',
+
+    failBuild: 'The build failed.',
+    buildRunning: 'building...',
+    stepPull: 'git pull',
+    stepInstall: 'dependencies',
+    stepPrisma: 'Prisma client',
+    stepMigrate: 'migrations',
+    stepBuilding: 'build started',
+    stepCompiled: 'compiled',
+    stepTypes: 'TypeScript',
+    stepPages: 'static pages',
+    stepStarting: 'server starting',
+    stepReady: 'ready',
+    readyPatternLabel: 'Line that means "ready" (regular expression)',
+    readyPatternHelp: 'The chain moves on when this appears in the console — no timers, no guessing. For Next.js the default already matches its "Ready in ..." line.',
 };
 
 const hu: typeof en = {
@@ -196,7 +207,6 @@ const hu: typeof en = {
     retry: 'Újra',
     close: 'Bezárás',
     elapsed: 'Eltelt',
-    stabilityProgress: 'Folyamatosan fut',
     appReported: 'az app jelezte hogy kész',
 
     phasePending: 'várakozik',
@@ -204,7 +214,6 @@ const hu: typeof en = {
     phaseSending: 'újraindítás',
     phaseStopping: 'leáll',
     phaseStarting: 'indul',
-    phaseStabilising: 'stabilitás ellenőrzése',
     phaseDone: 'kész',
     phaseFailed: 'hiba',
     phaseSkipped: 'kihagyva',
@@ -232,13 +241,26 @@ const hu: typeof en = {
 
     startChain: 'Lánc indítása',
     planTitle: 'Ez fog történni, ebben a sorrendben:',
-    stabilityLabel: 'Ennyi másodpercig kell futnia',
-    timeoutLabel: 'Ennyi másodperc után feladjuk',
     startScriptLabel: 'Start script a package.json javításához',
     startScriptHelp: 'A %PORT% helyére a Pterodactyl által kiosztott port kerül — neked sosem kell begépelned.',
 
     consoleWaiting: 'Várakozás a konzol kimenetére...',
     jumpToBottom: 'Ugrás a legaljára',
+
+    failBuild: 'A build elhasalt.',
+    buildRunning: 'buildel...',
+    stepPull: 'git pull',
+    stepInstall: 'függőségek',
+    stepPrisma: 'Prisma kliens',
+    stepMigrate: 'migrációk',
+    stepBuilding: 'build indult',
+    stepCompiled: 'lefordult',
+    stepTypes: 'TypeScript',
+    stepPages: 'statikus oldalak',
+    stepStarting: 'szerver indul',
+    stepReady: 'kész',
+    readyPatternLabel: 'A sor, ami azt jelenti "kész" (reguláris kifejezés)',
+    readyPatternHelp: 'A lánc akkor lép tovább, amikor ez megjelenik a konzolon — nincs időzítés, nincs találgatás. Next.js-hez az alapértelmezés már illeszkedik a "Ready in ..." sorra.',
 };
 
 export const STRINGS: Record<Lang, typeof en> = { en, hu };

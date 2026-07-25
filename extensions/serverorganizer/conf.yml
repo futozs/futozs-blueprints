@@ -3,7 +3,7 @@ info:
   identifier: "serverorganizer"
   description: "Csoportositsd, szinezd es rendezd a szervereidet, es inditsd ujra a redundans parokat egyetlen gombbal - eloszor a backup, utana a primary, elo visszajelzessel."
   flags: ""
-  version: "2.1.0"
+  version: "3.0.0"
   target: "beta-2026-06"
   author: "Futó Zsombor"
   icon: ""

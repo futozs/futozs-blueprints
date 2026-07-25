@@ -3,9 +3,9 @@ import getWebsocketToken from '@/api/server/getWebsocketToken';
 import { Websocket } from '@/plugins/Websocket';
 import { Server } from '@/api/server/getServer';
 import { ChainConfig, ChainState, ConsoleLine, StepState } from './types';
-import { classifyLine } from './patterns';
+import { classifyLine, compileReadyPattern } from './patterns';
 
-const MAX_LINES = 1000;
+const MAX_LINES = 2000;
 
 export interface ChainTarget {
     server: Server;
@@ -18,10 +18,9 @@ const makeStep = (target: ChainTarget): StepState => ({
     name: target.server.name,
     role: target.role,
     phase: 'pending',
-    stableFor: 0,
     elapsed: 0,
     lines: [],
-    appReady: false,
+    progress: [],
     failureKind: null,
     failureDetail: null,
 });
@@ -36,19 +35,30 @@ const EMPTY: ChainState = {
 };
 
 /**
- * Egyetlen szerver ujrainditasa, es varakozas arra, hogy tenyleg fusson.
+ * Egyetlen szerver ujrainditasa, es varakozas arra, hogy tenylegesen keszen
+ * alljon.
  *
- * A nehezseg az, hogy a websocket a csatlakozas pillanataban azonnal kikuldi az
- * AKTUALIS allapotot - ami az ujrainditas elott meg 'running'. Ha ezt naivan
- * figyelnenk, a rakovetkezo 'stopping' esemenyt osszeomlasnak neznenk. Ezert
- * szakaszokban haladunk: eloszor megvarjuk hogy a szerver tenyleg lemenjen,
- * es csak az utana kovetkezo 'running' szamit.
+ * A siker feltetele NEM ido, hanem az alkalmazas sajat visszajelzese: a
+ * konzolon megjelenik a "kesz vagyok" sor (Next.js eseten "Ready in ...").
+ * Egy build percekig is tarthat - nincs ertelme masodperceket tippelni.
+ *
+ * Ket csapdat kell kikerulni:
+ *
+ *  1. A Wings a csatlakozaskor visszakuldi a KORABBI konzol-elozmenyt. Ha abban
+ *     benne van egy regi "Ready in", azonnal - es hamisan - sikert jeleznenk.
+ *     Ezert a kesz-jelzest csak azutan fogadjuk el, hogy a szervert lattuk
+ *     lemenni vagy elindulni.
+ *
+ *  2. A csatlakozas pillanataban az allapot meg 'running' (hiszen meg el sem
+ *     kuldtuk az ujrainditast). Ezert szakaszokban haladunk.
  */
 const runStep = (
     target: ChainTarget,
     config: ChainConfig,
     patch: (partial: Partial<StepState>) => void,
     appendLine: (line: ConsoleLine) => void,
+    markProgress: (key: string) => void,
+    clearOutput: () => void,
     shouldAbort: () => boolean,
     registerSocket: (socket: Websocket) => void
 ): Promise<boolean> =>
@@ -56,10 +66,9 @@ const runStep = (
         let settled = false;
         let socket: Websocket | null = null;
         let stage: 'init' | 'awaitingDown' | 'awaitingUp' | 'up' = 'init';
-        let status = '';
-        let runningSince: number | null = null;
         let ticker: ReturnType<typeof setInterval> | null = null;
         const startedAt = Date.now();
+        const readyPattern = compileReadyPattern(config.readyPattern);
 
         const cleanup = () => {
             if (ticker) clearInterval(ticker);
@@ -85,9 +94,12 @@ const runStep = (
             if (settled) return;
             settled = true;
             cleanup();
-            patch({ phase: 'done', stableFor: config.stabilitySeconds });
+            patch({ phase: 'done' });
             resolve(true);
         };
+
+        /** Az ujrainditas utani szakasz - innentol erdekes barmi, amit latunk. */
+        const isFresh = () => stage === 'awaitingUp' || stage === 'up';
 
         patch({ phase: 'connecting' });
 
@@ -99,55 +111,58 @@ const runStep = (
                 registerSocket(socket);
 
                 socket.on('console output', (line: string) => {
-                    const verdict = classifyLine(line);
+                    // A regi elozmenyt eldobjuk: az meg az elozo futashoz tartozik.
+                    if (stage === 'init') return;
+
+                    const verdict = classifyLine(line, readyPattern);
 
                     appendLine({ text: line, level: verdict.level });
 
-                    if (verdict.ready) {
-                        patch({ appReady: true });
+                    if (!isFresh()) return;
+
+                    if (verdict.progressKey) {
+                        markProgress(verdict.progressKey);
                     }
 
-                    // Csak a FAILURE kategoria allitja meg a lancot. A NOTICE
-                    // sorok (pl. "Cannot find module") csak kiemelve latszanak.
                     if (verdict.failure) {
                         fail(verdict.failure.kind, line.trim().slice(0, 400));
+                        return;
+                    }
+
+                    if (verdict.ready) {
+                        // Ez az egyetlen sikerfeltetel: az app kiirta hogy kesz.
+                        succeed();
                     }
                 });
 
                 socket.on('status', (next: string) => {
-                    status = next;
-
                     if (stage === 'init') {
-                        // Meg el sem kuldtuk az ujrainditast: ez csak a kiindulasi allapot.
+                        // Meg el sem kuldtuk az ujrainditast: ez a kiindulasi allapot.
                         return;
                     }
 
                     if (stage === 'awaitingDown') {
-                        if (next === 'stopping' || next === 'offline') {
+                        if (next === 'stopping' || next === 'offline' || next === 'starting') {
                             stage = 'awaitingUp';
-                            patch({ phase: 'stopping' });
-                        } else if (next === 'starting') {
-                            // Elofordul hogy a leallast le sem latjuk (gyors restart,
-                            // vagy eleve allo szerver) - ez is az ujrainditas kezdete.
-                            stage = 'awaitingUp';
-                            patch({ phase: 'starting' });
+                            // Innentol a kimenet mar az uj futashoz tartozik.
+                            clearOutput();
+                            patch({ phase: next === 'starting' ? 'starting' : 'stopping' });
                         }
                         return;
                     }
 
                     if (stage === 'awaitingUp') {
                         if (next === 'running') {
-                            runningSince = Date.now();
                             stage = 'up';
-                            patch({ phase: 'stabilising', stableFor: 0 });
-                        } else {
-                            patch({ phase: next === 'starting' ? 'starting' : 'stopping' });
+                            patch({ phase: 'starting' });
+                        } else if (next === 'starting') {
+                            patch({ phase: 'starting' });
                         }
                         return;
                     }
 
                     if (stage === 'up' && next !== 'running') {
-                        // Mar futott, es megis lement -> ez osszeomlas.
+                        // Mar futott, es megis lement - a build vagy az app elszallt.
                         fail('crash', next);
                     }
                 });
@@ -175,16 +190,10 @@ const runStep = (
                     }
 
                     const elapsed = Math.round((Date.now() - startedAt) / 1000);
-                    const stable = runningSince ? Math.round((Date.now() - runningSince) / 1000) : 0;
-                    patch({ elapsed, stableFor: stable });
+                    patch({ elapsed });
 
                     if (elapsed >= config.timeoutSeconds) {
                         fail('timeout', null);
-                        return;
-                    }
-
-                    if (stage === 'up' && status === 'running' && stable >= config.stabilitySeconds) {
-                        succeed();
                     }
                 }, 1000);
             })
@@ -212,6 +221,24 @@ export const useRestartChain = () => {
         }));
     }, []);
 
+    const markProgress = useCallback((index: number, key: string) => {
+        setState((prev) => ({
+            ...prev,
+            steps: prev.steps.map((step, i) =>
+                i === index && step.progress.indexOf(key) === -1
+                    ? { ...step, progress: [...step.progress, key] }
+                    : step
+            ),
+        }));
+    }, []);
+
+    const clearOutput = useCallback((index: number) => {
+        setState((prev) => ({
+            ...prev,
+            steps: prev.steps.map((step, i) => (i === index ? { ...step, lines: [], progress: [] } : step)),
+        }));
+    }, []);
+
     const start = useCallback(
         async (targets: ChainTarget[], config: ChainConfig) => {
             abortRef.current = false;
@@ -234,6 +261,8 @@ export const useRestartChain = () => {
                     config,
                     (partial) => patchStep(i, partial),
                     (line) => appendLine(i, line),
+                    (key) => markProgress(i, key),
+                    () => clearOutput(i),
                     () => abortRef.current,
                     (socket) => socketsRef.current.push(socket)
                 );
@@ -257,7 +286,7 @@ export const useRestartChain = () => {
 
             setState((prev) => ({ ...prev, running: false, activeIndex: null, finishedAt: Date.now() }));
         },
-        [patchStep, appendLine]
+        [patchStep, appendLine, markProgress, clearOutput]
     );
 
     const abort = useCallback(() => {

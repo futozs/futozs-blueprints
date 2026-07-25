@@ -45,8 +45,8 @@ class ServerOrganizerController extends Controller
 
             // Lancolt ujrainditas beallitasai.
             'data.chain' => ['present', 'array'],
-            'data.chain.stabilitySeconds' => ['required', 'integer', 'min:5', 'max:600'],
-            'data.chain.timeoutSeconds' => ['required', 'integer', 'min:30', 'max:3600'],
+            'data.chain.readyPattern' => ['required', 'string', 'max:256'],
+            'data.chain.timeoutSeconds' => ['required', 'integer', 'min:60', 'max:7200'],
             'data.chain.startScript' => ['required', 'string', 'max:256'],
 
             'data.groups' => ['present', 'array', 'max:100'],

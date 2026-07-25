@@ -27,42 +27,16 @@ const normalize = (raw: any): OrganizerPrefs => {
         sortMode: ['manual', 'name', 'status', 'role'].includes(raw.sortMode) ? raw.sortMode : base.sortMode,
         language: raw.language === 'hu' || raw.language === 'en' ? raw.language : null,
         chain: {
-            stabilitySeconds: clampNumber(raw.chain?.stabilitySeconds, 5, 600, DEFAULT_CHAIN_CONFIG.stabilitySeconds),
-            timeoutSeconds: clampNumber(raw.chain?.timeoutSeconds, 30, 3600, DEFAULT_CHAIN_CONFIG.timeoutSeconds),
+            readyPattern:
+                typeof raw.chain?.readyPattern === 'string' && raw.chain.readyPattern.trim()
+                    ? raw.chain.readyPattern.slice(0, 256)
+                    : DEFAULT_CHAIN_CONFIG.readyPattern,
+            timeoutSeconds: clampNumber(raw.chain?.timeoutSeconds, 60, 7200, DEFAULT_CHAIN_CONFIG.timeoutSeconds),
             startScript:
                 typeof raw.chain?.startScript === 'string' && raw.chain.startScript.trim()
                     ? raw.chain.startScript.slice(0, 256)
                     : DEFAULT_CHAIN_CONFIG.startScript,
         },
-        groups: Array.isArray(raw.groups)
-            ? raw.groups
-                  .filter((g: any) => g && typeof g.id === 'string' && typeof g.name === 'string')
-                  .map((g: any, index: number) => ({
-                      id: g.id,
-                      name: g.name,
-                      color: typeof g.color === 'string' ? g.color : '#38bdf8',
-                      icon: typeof g.icon === 'string' ? g.icon : null,
-                      collapsed: g.collapsed === true,
-                      order: typeof g.order === 'number' ? g.order : index,
-                  }))
-            : base.groups,
-        servers:
-            raw.servers && typeof raw.servers === 'object' && !Array.isArray(raw.servers)
-                ? Object.keys(raw.servers).reduce((acc: Record<string, any>, key) => {
-                      const s = raw.servers[key];
-                      if (!s || typeof s !== 'object') return acc;
-
-                      acc[key] = {
-                          group: typeof s.group === 'string' ? s.group : null,
-                          color: typeof s.color === 'string' ? s.color : null,
-                          icon: typeof s.icon === 'string' ? s.icon : null,
-                          imageUrl: typeof s.imageUrl === 'string' ? s.imageUrl : null,
-                          role: s.role === 'primary' || s.role === 'backup' ? s.role : null,
-                          order: typeof s.order === 'number' ? s.order : 0,
-                      };
-                      return acc;
-                  }, {})
-                : base.servers,
     };
 };
 

@@ -2,10 +2,10 @@ import { useCallback, useRef, useState } from 'react';
 import getWebsocketToken from '@/api/server/getWebsocketToken';
 import { Websocket } from '@/plugins/Websocket';
 import { Server } from '@/api/server/getServer';
-import { ChainConfig, ChainState, StepState } from './types';
-import { detectFailure, detectReady } from './patterns';
+import { ChainConfig, ChainState, ConsoleLine, StepState } from './types';
+import { classifyLine } from './patterns';
 
-const MAX_LINES = 300;
+const MAX_LINES = 1000;
 
 export interface ChainTarget {
     server: Server;
@@ -48,7 +48,7 @@ const runStep = (
     target: ChainTarget,
     config: ChainConfig,
     patch: (partial: Partial<StepState>) => void,
-    appendLine: (line: string) => void,
+    appendLine: (line: ConsoleLine) => void,
     shouldAbort: () => boolean,
     registerSocket: (socket: Websocket) => void
 ): Promise<boolean> =>
@@ -99,15 +99,18 @@ const runStep = (
                 registerSocket(socket);
 
                 socket.on('console output', (line: string) => {
-                    appendLine(line);
+                    const verdict = classifyLine(line);
 
-                    if (detectReady(line)) {
+                    appendLine({ text: line, level: verdict.level });
+
+                    if (verdict.ready) {
                         patch({ appReady: true });
                     }
 
-                    const failure = detectFailure(line);
-                    if (failure) {
-                        fail(failure.kind, line.trim().slice(0, 400));
+                    // Csak a FAILURE kategoria allitja meg a lancot. A NOTICE
+                    // sorok (pl. "Cannot find module") csak kiemelve latszanak.
+                    if (verdict.failure) {
+                        fail(verdict.failure.kind, line.trim().slice(0, 400));
                     }
                 });
 
@@ -200,7 +203,7 @@ export const useRestartChain = () => {
         }));
     }, []);
 
-    const appendLine = useCallback((index: number, line: string) => {
+    const appendLine = useCallback((index: number, line: ConsoleLine) => {
         setState((prev) => ({
             ...prev,
             steps: prev.steps.map((step, i) =>

@@ -13,11 +13,14 @@ export const Modal = ({
     onClose,
     children,
     footer,
+    maxWidth = 480,
 }: {
     title: string;
     onClose: () => void;
     children: React.ReactNode;
     footer?: React.ReactNode;
+    /** Szeles tartalomhoz (pl. konzol) nagyobb ertek adhato meg. */
+    maxWidth?: number;
 }) => (
     <div
         onClick={onClose}
@@ -36,8 +39,8 @@ export const Modal = ({
             onClick={(e) => e.stopPropagation()}
             style={{
                 width: '100%',
-                maxWidth: 480,
-                maxHeight: '85vh',
+                maxWidth,
+                maxHeight: '88vh',
                 overflowY: 'auto',
                 background: C.panel,
                 border: `1px solid ${C.border}`,

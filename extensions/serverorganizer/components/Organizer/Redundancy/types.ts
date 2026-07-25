@@ -1,4 +1,9 @@
-import { FailureKind } from './patterns';
+import { FailureKind, LineLevel } from './patterns';
+
+export interface ConsoleLine {
+    text: string;
+    level: LineLevel;
+}
 
 export type StepPhase =
     | 'pending' // meg nem kerult sorra
@@ -22,7 +27,7 @@ export interface StepState {
     /** Mennyi ideje tart az egesz lepes. */
     elapsed: number;
     /** A konzol utolso sorai - ezt latja a felhasznalo elesben. */
-    lines: string[];
+    lines: ConsoleLine[];
     /** Latta-e mar az app sajat "elindultam" uzenetet. */
     appReady: boolean;
     failureKind: FailureKind | 'timeout' | 'offline' | 'aborted' | 'api' | null;

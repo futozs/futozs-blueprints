@@ -119,6 +119,9 @@ const en = {
     timeoutLabel: 'Give up after (seconds)',
     startScriptLabel: 'Start script used when fixing package.json',
     startScriptHelp: '%PORT% is replaced with the port Pterodactyl allocated to that server — you never type it yourself.',
+
+    consoleWaiting: 'Waiting for console output...',
+    jumpToBottom: 'Jump to latest',
 };
 
 const hu: typeof en = {
@@ -233,6 +236,9 @@ const hu: typeof en = {
     timeoutLabel: 'Ennyi másodperc után feladjuk',
     startScriptLabel: 'Start script a package.json javításához',
     startScriptHelp: 'A %PORT% helyére a Pterodactyl által kiosztott port kerül — neked sosem kell begépelned.',
+
+    consoleWaiting: 'Várakozás a konzol kimenetére...',
+    jumpToBottom: 'Ugrás a legaljára',
 };
 
 export const STRINGS: Record<Lang, typeof en> = { en, hu };

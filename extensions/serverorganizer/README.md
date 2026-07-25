@@ -37,12 +37,24 @@ for a configurable window (30 seconds by default). This deliberately catches the
 starts, prints that it is ready, and dies moments later — a plain "is it running" check would call
 that a success and restart your primary on top of a dead backup.
 
-**Failure detection** additionally watches the console for known signatures: failed `git pull`
-(merge conflicts, untracked files that would be overwritten), broken `package.json`, ports already in
-use, and common Node crashes. The patterns live in `components/Organizer/Redundancy/patterns.ts` —
-add your own if your stack prints something different. A missing pattern is not dangerous: the
-stability window still catches a crash. An over-broad pattern is worse, which is why the defaults
-match specific lines rather than the word "error".
+**Failure detection.** Console patterns are split into two kinds, and the distinction matters:
+
+- **Halting patterns** stop the chain. Only lines that are unambiguously fatal *and* actionable
+  qualify: a git pull that actually stopped, machine-readable npm errors like `EJSONPARSE`, a port
+  already in use, heap exhaustion.
+- **Notices** are highlighted in the console but stop nothing — `Cannot find module`, stack trace
+  lines, warnings. These are routine noise in plenty of setups.
+
+If an application really does crash, it is **not** pattern matching that catches it — the server
+drops out of `running` and the stability window fails the step. The patterns only explain *why*;
+they never decide *whether* something broke. That is why a missing pattern is harmless while an
+over-broad one is not: it halts a healthy deployment over a line that meant nothing.
+
+The lists live in `components/Organizer/Redundancy/patterns.ts` — move a line between the two
+categories if your stack disagrees.
+
+**Console.** Output is rendered with full ANSI colour support, highlighted by line category, and
+follows the tail automatically until you scroll up.
 
 **Repairs.** When a `package.json` or port problem is detected, the panel offers a fix rather than
 acting on its own:

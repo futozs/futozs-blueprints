@@ -100,34 +100,50 @@ export const buildUnits = (servers: Server[]): Unit[] => {
 
 export type LiveState = ServerPowerState | 'unknown';
 
+export interface LiveInfo {
+    state: LiveState;
+    cpu: number;
+    memory: number;
+    disk: number;
+}
+
 const POLL_MS = 15000;
 
 /**
- * Az osszes szerver elo allapota (fut / indul / all). A panel sajat soraival
- * azonos vegpont; a rendezeshez es a kartyak fejlecehez kell.
+ * Az osszes szerver elo adata (allapot, CPU, RAM, disk). A panel sajat soraival
+ * azonos vegpont; a rendezeshez es a parkartyak soraihoz kell.
  */
-export const useLiveStates = (servers: Server[] | null): Record<string, LiveState> => {
-    const [states, setStates] = useState<Record<string, LiveState>>({});
+export const useLiveStates = (servers: Server[] | null): Record<string, LiveInfo> => {
+    const [states, setStates] = useState<Record<string, LiveInfo>>({});
     const key = (servers || []).map((server) => server.uuid).join(',');
 
     useEffect(() => {
         if (!servers || servers.length === 0) return;
 
         let cancelled = false;
+        const empty = (state: LiveState): LiveInfo => ({ state, cpu: 0, memory: 0, disk: 0 });
 
         const poll = () =>
             Promise.all(
                 servers.map((server) =>
                     server.status === 'suspended' || server.isTransferring || server.status === 'installing'
-                        ? Promise.resolve<[string, LiveState]>([server.uuid, 'offline'])
+                        ? Promise.resolve<[string, LiveInfo]>([server.uuid, empty('offline')])
                         : getServerResourceUsage(server.uuid)
-                              .then((stats): [string, LiveState] => [server.uuid, stats.status])
-                              .catch((): [string, LiveState] => [server.uuid, 'unknown'])
+                              .then((stats): [string, LiveInfo] => [
+                                  server.uuid,
+                                  {
+                                      state: stats.status,
+                                      cpu: stats.cpuUsagePercent,
+                                      memory: stats.memoryUsageInBytes,
+                                      disk: stats.diskUsageInBytes,
+                                  },
+                              ])
+                              .catch((): [string, LiveInfo] => [server.uuid, empty('unknown')])
                 )
             ).then((entries) => {
                 if (cancelled) return;
-                const next: Record<string, LiveState> = {};
-                entries.forEach(([uuid, state]) => (next[uuid] = state));
+                const next: Record<string, LiveInfo> = {};
+                entries.forEach(([uuid, info]) => (next[uuid] = info));
                 setStates(next);
             });
 

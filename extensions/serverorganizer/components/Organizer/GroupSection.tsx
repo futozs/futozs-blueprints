@@ -7,12 +7,12 @@ import { C } from './ui';
 import { useT } from './i18n';
 import ServerCard from './ServerCard';
 import PairCard from './PairCard';
-import { LiveState, Unit, isChainable } from './pairs';
+import { LiveInfo, Unit, isChainable } from './pairs';
 
 interface Props {
     group: OrganizerGroup | null;
     units: Unit[];
-    states: Record<string, LiveState>;
+    states: Record<string, LiveInfo>;
     prefFor: (uuid: string) => ServerPref;
     editMode: boolean;
     showHeader: boolean;
@@ -71,7 +71,7 @@ export default ({
 
     return (
         <div
-            style={{ marginBottom: '1.75rem', opacity: isGroupDragging ? 0.4 : 1 }}
+            style={{ marginBottom: '1.5rem', opacity: isGroupDragging ? 0.4 : 1 }}
             onDragOver={(e) => {
                 // Ures csoportra / a csoport ures teruletere ejtes: ide kerul a szerver.
                 if (!editMode || !draggingServer) return;
@@ -112,12 +112,12 @@ export default ({
                     style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.7rem 1rem',
-                        marginBottom: '0.9rem',
-                        borderRadius: '0.6rem',
+                        gap: '0.6rem',
+                        padding: '0.55rem 0.9rem',
+                        marginBottom: '0.75rem',
+                        borderRadius: '0.375rem',
                         background: C.panel,
-                        borderLeft: `5px solid ${color}`,
+                        borderLeft: `3px solid ${color}`,
                     }}
                 >
                     {editMode && group && (
@@ -145,13 +145,13 @@ export default ({
                     >
                         <FontAwesomeIcon
                             icon={collapsed ? faChevronRight : faChevronDown}
-                            style={{ color: C.faint, fontSize: '0.95rem', width: 14 }}
+                            style={{ color: C.faint, fontSize: '0.8rem', width: 12 }}
                         />
-                        {icon && <FontAwesomeIcon icon={icon} style={{ color, fontSize: '1.2rem' }} />}
+                        {icon && <FontAwesomeIcon icon={icon} style={{ color }} />}
                         <span
                             style={{
-                                fontSize: '1.15rem',
-                                fontWeight: 800,
+                                fontSize: '1rem',
+                                fontWeight: 600,
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
@@ -159,7 +159,7 @@ export default ({
                         >
                             {group ? group.name : t('ungrouped')}
                         </span>
-                        <span style={{ color: C.faint, fontSize: '0.95rem', fontWeight: 700 }}>{units.length}</span>
+                        <span style={{ color: C.faint, fontSize: '0.85rem' }}>{units.length}</span>
                     </button>
 
                     {editMode && group && (

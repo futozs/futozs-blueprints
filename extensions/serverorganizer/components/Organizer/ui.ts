@@ -42,25 +42,24 @@ export const btn = (active = false): CSSProperties => ({
 export type BigKind = 'go' | 'danger' | 'ok' | 'plain';
 
 const BIG: Record<BigKind, { bg: string; fg: string; border: string }> = {
-    go: { bg: '#0284c7', fg: '#fff', border: '#38bdf8' },
-    danger: { bg: 'rgba(239,68,68,0.12)', fg: '#fca5a5', border: '#ef4444' },
-    ok: { bg: '#059669', fg: '#fff', border: '#34d399' },
-    plain: { bg: C.panel, fg: C.text, border: C.border },
+    go: { bg: '#2563eb', fg: '#fff', border: '#2563eb' },
+    danger: { bg: 'transparent', fg: '#f87171', border: '#b91c1c' },
+    ok: { bg: '#15803d', fg: '#fff', border: '#15803d' },
+    plain: { bg: 'transparent', fg: C.muted, border: C.border },
 };
 
-/** Nagy, egyertelmu gomb - a lanc fo muveleteihez. */
+/** A lanc fo muveleteinek gombja - jol lathato, de nem harsany. */
 export const bigBtn = (kind: BigKind, disabled = false): CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '0.7rem',
-    minHeight: 64,
-    padding: '0 2rem',
-    fontSize: '1.25rem',
-    fontWeight: 700,
-    letterSpacing: '0.01em',
-    borderRadius: '0.6rem',
-    border: `2px solid ${BIG[kind].border}`,
+    gap: '0.5rem',
+    height: 40,
+    padding: '0 1.1rem',
+    fontSize: '0.9rem',
+    fontWeight: 600,
+    borderRadius: '0.375rem',
+    border: `1px solid ${BIG[kind].border}`,
     background: BIG[kind].bg,
     color: BIG[kind].fg,
     cursor: disabled ? 'not-allowed' : 'pointer',

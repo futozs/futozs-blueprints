@@ -122,6 +122,7 @@ const en = {
     msReady: 'Serving',
     msWarm: 'Warm',
 
+    console: 'Console',
     consoleWaiting: 'Waiting for console output…',
     jumpToBottom: 'Latest',
 };
@@ -241,6 +242,7 @@ const hu: typeof en = {
     msReady: 'Kiszolgál',
     msWarm: 'Kész',
 
+    console: 'Konzol',
     consoleWaiting: 'Várakozás a konzolra…',
     jumpToBottom: 'Legújabb',
 };

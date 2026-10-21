@@ -3,7 +3,7 @@ info:
   identifier: "serverorganizer"
   description: "Csoportok, szinek, primary/backup parkartyak elo allapottal, es egygombos ujrainditas: elobb a primary, utana a backup - teljes kepernyos konzollal."
   flags: ""
-  version: "4.0.0"
+  version: "4.1.0"
   target: "beta-2026-06"
   author: "Futó Zsombor"
   icon: ""

@@ -183,7 +183,7 @@ const Organizer = () => {
 
         const title = (unit: Unit) => repoLabel(unit.repo) || unit.anchor.name;
         // Egy egyseg allapota a legrosszabb tagjae: ha a backup all, a par is "baj".
-        const health = (unit: Unit) => Math.min(...unitServers(unit).map((server) => stateRank(states[server.uuid])));
+        const health = (unit: Unit) => Math.min(...unitServers(unit).map((server) => stateRank(states[server.uuid]?.state)));
         const order = (unit: Unit) => (storedServers[unit.anchor.uuid] || defaultServerPref(0)).order;
 
         const compare = (a: Unit, b: Unit): number => {

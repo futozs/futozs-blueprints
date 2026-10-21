@@ -44,8 +44,7 @@ export const Modal = ({
                 overflowY: 'auto',
                 background: C.panel,
                 border: `1px solid ${C.border}`,
-                borderRadius: '0.9rem',
-                boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                borderRadius: '0.5rem',
                 color: C.text,
             }}
         >
@@ -58,7 +57,7 @@ export const Modal = ({
                     borderBottom: `1px solid ${C.border}`,
                 }}
             >
-                <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>{title}</span>
+                <span style={{ fontSize: '1.1rem', fontWeight: 600 }}>{title}</span>
                 <button
                     type={'button'}
                     onClick={onClose}
@@ -90,8 +89,8 @@ export const Modal = ({
 const Label = ({ children }: { children: React.ReactNode }) => (
     <div
         style={{
-            fontSize: '0.85rem',
-            fontWeight: 700,
+            fontSize: '0.75rem',
+            fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
             color: C.faint,

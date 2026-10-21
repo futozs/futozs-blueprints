@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGripVertical, faPen, faRedo } from '@fortawesome/free-solid-svg-icons';
-import ServerRow from '@/components/dashboard/ServerRow';
 import { Server } from '@/api/server/getServer';
+import { bytesToString, ip, mbToBytes } from '@/lib/formatters';
 import { ServerPref } from './types';
 import { resolveIcon } from './icons';
-import { C, bigBtn } from './ui';
+import { C, MONO, bigBtn } from './ui';
 import { useT } from './i18n';
-import { LiveState, Unit, repoLabel } from './pairs';
+import { LiveInfo, Unit, repoLabel } from './pairs';
 
 interface Props {
     unit: Unit;
     pref: ServerPref;
-    states: Record<string, LiveState>;
+    states: Record<string, LiveInfo>;
     editMode: boolean;
     isDragging: boolean;
     dropPosition: 'before' | 'after' | null;
@@ -24,28 +25,59 @@ interface Props {
     onRestart: () => void;
 }
 
-const RoleColumn = ({ server, role }: { server: Server; role: 'primary' | 'backup' }) => (
-    <div style={{ minWidth: 0 }}>
-        <div
-            style={{
-                fontSize: '0.8rem',
-                fontWeight: 800,
-                letterSpacing: '0.14em',
-                color: role === 'primary' ? C.primary : C.backup,
-                margin: '0 0 0.35rem 0.15rem',
-            }}
-        >
-            {role === 'primary' ? 'PRIMARY' : 'BACKUP'}
-        </div>
-        <div className={'so-row-wrapper'}>
-            <ServerRow server={server} />
-        </div>
-    </div>
+export const stateColour = (state: string | undefined): string =>
+    state === 'running' ? C.ok : state === 'starting' || state === 'stopping' ? C.warn : state === 'offline' ? C.danger : C.faint;
+
+const address = (server: Server): string => {
+    const alloc = (server.allocations || []).find((entry) => entry.isDefault);
+    return alloc ? `${alloc.alias || ip(alloc.ip)}:${alloc.port}` : '';
+};
+
+const Metric = ({ value, limit, className }: { value: string; limit: string | null; className?: string }) => (
+    <span className={className} style={{ whiteSpace: 'nowrap', fontFamily: MONO, fontSize: '0.82rem', color: C.text }}>
+        {value}
+        {limit && <span style={{ color: C.faint }}> / {limit}</span>}
+    </span>
 );
 
+/** Egy szerver egyetlen sorban: szerep, nev + cim, CPU, RAM, disk. */
+const ServerLine = ({ server, role, info }: { server: Server; role: 'primary' | 'backup'; info: LiveInfo | undefined }) => {
+    const live = info && info.state !== 'offline' && info.state !== 'unknown';
+    const limits = server.limits;
+
+    return (
+        <Link to={`/server/${server.id}`} className={'so-pair-row'}>
+            <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.08em', color: role === 'primary' ? C.primary : C.backup }}>
+                {role === 'primary' ? 'PRIMARY' : 'BACKUP'}
+            </span>
+
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0 }}>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: stateColour(info?.state), flexShrink: 0 }} />
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: C.text }}>
+                    {server.name}
+                </span>
+                <span className={'so-hide-sm'} style={{ fontFamily: MONO, fontSize: '0.78rem', color: C.faint, whiteSpace: 'nowrap' }}>
+                    {address(server)}
+                </span>
+            </span>
+
+            <Metric value={live ? `${info!.cpu.toFixed(1)}%` : '–'} limit={limits.cpu ? `${limits.cpu}%` : null} />
+            <Metric
+                value={live ? bytesToString(info!.memory) : '–'}
+                limit={limits.memory ? bytesToString(mbToBytes(limits.memory)) : null}
+            />
+            <Metric
+                className={'so-hide-sm'}
+                value={info && info.state !== 'unknown' ? bytesToString(info.disk) : '–'}
+                limit={limits.disk ? bytesToString(mbToBytes(limits.disk)) : null}
+            />
+        </Link>
+    );
+};
+
 /**
- * Egy oldal = egy kartya: a primary es a backup egymas mellett, egy nagy
- * ujrainditas gombbal. A par a szerverek ROLE + GIT_ADDRESS valtozojabol all ossze.
+ * Egy oldal = egy kartya: fejlec ujrainditas gombbal, alatta a primary es a
+ * backup egy-egy sorban. A par a szerverek ROLE + GIT_ADDRESS valtozojabol all ossze.
  */
 export default ({
     unit,
@@ -66,16 +98,14 @@ export default ({
 
     const icon = resolveIcon(pref.icon);
     const showImage = !!pref.imageUrl && !imageFailed;
-    const accent = pref.color || C.border;
     const title = repoLabel(unit.repo) || unit.anchor.name;
 
     const members = [unit.primary, unit.backup].filter((server): server is Server => !!server);
-    const running = members.filter((server) => states[server.uuid] === 'running').length;
-    const known = members.every((server) => !!states[server.uuid] && states[server.uuid] !== 'unknown');
-    const health = !known ? null : running === members.length ? 'ok' : running === 0 ? 'down' : 'half';
-    const healthColour = health === 'ok' ? C.ok : health === 'down' ? C.danger : C.warn;
+    const running = members.filter((server) => states[server.uuid]?.state === 'running').length;
+    const known = members.every((server) => states[server.uuid] && states[server.uuid].state !== 'unknown');
+    const healthColour = running === members.length ? C.ok : running === 0 ? C.danger : C.warn;
 
-    const classes = [];
+    const classes = ['so-pair'];
     if (isDragging) classes.push('so-dragging');
     if (dropPosition === 'before') classes.push('so-drop-before');
     if (dropPosition === 'after') classes.push('so-drop-after');
@@ -103,42 +133,23 @@ export default ({
                 e.stopPropagation();
                 onDrop();
             }}
-            style={{
-                marginBottom: '1rem',
-                borderRadius: '0.75rem',
-                background: 'rgba(255,255,255,0.025)',
-                border: `1px solid ${C.border}`,
-                borderLeft: `5px solid ${accent}`,
-                padding: '1rem 1.1rem 1.1rem',
-                transition: 'box-shadow 120ms ease',
-            }}
+            style={{ borderLeft: `3px solid ${pref.color || C.border}` }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', flexWrap: 'wrap', marginBottom: '0.9rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.7rem 0.9rem' }}>
                 {editMode && (
-                    <span className={'so-draggable'} title={t('dragToReorder')} style={{ color: C.faint, fontSize: '1.1rem' }}>
+                    <span className={'so-draggable'} title={t('dragToReorder')} style={{ color: C.faint }}>
                         <FontAwesomeIcon icon={faGripVertical} />
                     </span>
                 )}
 
                 {(showImage || icon) && (
-                    <span
-                        style={{
-                            width: 36,
-                            height: 36,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: pref.color || C.muted,
-                            fontSize: '1.4rem',
-                            flexShrink: 0,
-                        }}
-                    >
+                    <span style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', color: pref.color || C.muted, flexShrink: 0 }}>
                         {showImage ? (
                             <img
                                 src={pref.imageUrl as string}
                                 alt={''}
                                 onError={() => setImageFailed(true)}
-                                style={{ width: 34, height: 34, objectFit: 'cover', borderRadius: '0.4rem' }}
+                                style={{ width: 22, height: 22, objectFit: 'cover', borderRadius: '0.25rem' }}
                             />
                         ) : (
                             icon && <FontAwesomeIcon icon={icon} />
@@ -146,59 +157,31 @@ export default ({
                     </span>
                 )}
 
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-                    <span
-                        style={{
-                            fontSize: '1.35rem',
-                            fontWeight: 800,
-                            color: C.text,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                        }}
-                    >
-                        {title}
+                <span style={{ fontSize: '1rem', fontWeight: 600, color: C.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {title}
+                </span>
+
+                {known && (
+                    <span style={{ fontSize: '0.8rem', color: healthColour, whiteSpace: 'nowrap' }}>
+                        {`${running}/${members.length} ${t('runningShort')}`}
                     </span>
-                    {health && (
-                        <span
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.45rem',
-                                padding: '0.3rem 0.75rem',
-                                borderRadius: 999,
-                                fontSize: '0.85rem',
-                                fontWeight: 700,
-                                color: healthColour,
-                                background: `${healthColour}1f`,
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            <span style={{ width: 9, height: 9, borderRadius: '50%', background: healthColour }} />
-                            {`${running}/${members.length} ${t('runningShort')}`}
-                        </span>
-                    )}
-                </div>
+                )}
+
+                <span style={{ flex: 1 }} />
 
                 {editMode ? (
-                    <button type={'button'} onClick={onEdit} style={{ ...bigBtn('plain'), minHeight: 48, fontSize: '1rem', padding: '0 1.1rem' }}>
+                    <button type={'button'} onClick={onEdit} style={bigBtn('plain')}>
                         <FontAwesomeIcon icon={faPen} /> {t('edit')}
                     </button>
                 ) : (
-                    <button
-                        type={'button'}
-                        onClick={onRestart}
-                        style={{ ...bigBtn('go'), minHeight: 52, fontSize: '1.1rem', padding: '0 1.5rem' }}
-                    >
+                    <button type={'button'} onClick={onRestart} style={bigBtn('go')}>
                         <FontAwesomeIcon icon={faRedo} /> {t('restart')}
                     </button>
                 )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '0.9rem' }}>
-                {unit.primary && <RoleColumn server={unit.primary} role={'primary'} />}
-                {unit.backup && <RoleColumn server={unit.backup} role={'backup'} />}
-            </div>
+            {unit.primary && <ServerLine server={unit.primary} role={'primary'} info={states[unit.primary.uuid]} />}
+            {unit.backup && <ServerLine server={unit.backup} role={'backup'} info={states[unit.backup.uuid]} />}
         </div>
     );
 };

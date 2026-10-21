@@ -35,9 +35,12 @@ A server without a `ROLE` is shown as a plain row, exactly as before.
 
 ## Restart
 
-Pressing **Restart** on a pair card opens a full-screen view: two large step cards (PRIMARY → BACKUP)
-with live status, CPU / RAM / uptime and the running commit, and a large console underneath. Click a
-card to watch that server's console; the active one is followed automatically.
+Pressing **Restart** on a pair card opens a large popup: two step cards (primary, backup) with live
+status, start.sh progress, CPU / RAM / uptime and the running commit, the action buttons, and a
+console underneath with one tab per server. The active server's console is followed automatically.
+
+Each server on a pair card is a single line — role, name, address, CPU, RAM, disk — rather than the
+panel's own row, which wraps every value onto its own line at half width.
 
 The chain itself is deliberately thin, because the server's `.ptero/start.sh` does the real work
 (git, build lock, install, build, migrations, launch on the allocated port):

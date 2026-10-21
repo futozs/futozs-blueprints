@@ -3,15 +3,12 @@ import { createPortal } from 'react-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
     faArrowDown,
-    faArrowRight,
     faCheck,
-    faCheckCircle,
     faCodeBranch,
     faExclamationTriangle,
     faRedo,
     faSpinner,
     faStop,
-    faSync,
     faTimes,
 } from '@fortawesome/free-solid-svg-icons';
 import { C, MONO, bigBtn, formatBytes, formatDuration } from '../ui';
@@ -26,10 +23,10 @@ import { parseAnsi } from './ansi';
 type Tone = 'idle' | 'busy' | 'ok' | 'bad' | 'wait';
 
 const TONE: Record<Tone, string> = {
-    idle: C.faint,
+    idle: C.muted,
     busy: C.accent,
     ok: C.ok,
-    bad: C.danger,
+    bad: '#f87171',
     wait: C.warn,
 };
 
@@ -37,18 +34,9 @@ const LEVEL_STYLE: Record<LineLevel, CSSProperties> = {
     normal: {},
     start: { color: '#67e8f9' },
     progress: { color: '#7dd3fc' },
-    ready: { color: '#4ade80', fontWeight: 700 },
+    ready: { color: '#4ade80' },
     warning: { color: '#fbbf24' },
     error: { color: '#f87171' },
-};
-
-const LEVEL_ACCENT: Record<LineLevel, string> = {
-    normal: 'transparent',
-    start: 'rgba(103,232,249,0.5)',
-    progress: '#38bdf8',
-    ready: '#4ade80',
-    warning: '#fbbf24',
-    error: '#f87171',
 };
 
 const MILESTONE_KEYS: Record<Milestone, StringKey> = {
@@ -59,15 +47,11 @@ const MILESTONE_KEYS: Record<Milestone, StringKey> = {
     warm: 'msWarm',
 };
 
-/* --------------------------------------------------- allapot -> nagy kiiras */
+/* --------------------------------------------------- allapot -> kiiras */
 
 const WAIT_ACTIVITIES = ['actWaitPeer', 'actWaitLock', 'actWaitMemory'];
 
-const describe = (
-    step: StepState,
-    live: Live,
-    chainStarted: boolean
-): { label: StringKey; tone: Tone; spinning: boolean } => {
+const describe = (step: StepState, live: Live): { label: StringKey; tone: Tone; spinning: boolean } => {
     const state = live.stats?.state;
 
     switch (step.phase) {
@@ -78,11 +62,7 @@ const describe = (
         case 'starting': {
             const activity = live.activity as StringKey | null;
             if (activity && activity !== 'actReady' && activity !== 'actWarm' && activity !== 'actError') {
-                return {
-                    label: activity,
-                    tone: WAIT_ACTIVITIES.indexOf(activity) !== -1 ? 'wait' : 'busy',
-                    spinning: true,
-                };
+                return { label: activity, tone: WAIT_ACTIVITIES.indexOf(activity) !== -1 ? 'wait' : 'busy', spinning: true };
             }
             return { label: 'phStarting', tone: 'busy', spinning: true };
         }
@@ -98,9 +78,9 @@ const describe = (
             break;
     }
 
-    // Meg nem kerult sorra: az elo allapotot mutatjuk.
+    // Meg nem kerult sorra: az elo allapot.
     if (!live.connected && !live.stats) return { label: 'stConnecting', tone: 'idle', spinning: true };
-    if (state === 'running') return { label: 'stRunning', tone: chainStarted ? 'idle' : 'ok', spinning: false };
+    if (state === 'running') return { label: 'stRunning', tone: 'ok', spinning: false };
     if (state === 'starting') return { label: 'stStarting', tone: 'busy', spinning: true };
     if (state === 'stopping') return { label: 'stStopping', tone: 'busy', spinning: true };
     return { label: 'stOffline', tone: 'bad', spinning: false };
@@ -113,36 +93,31 @@ const Milestones = ({ live, active, done }: { live: Live; active: boolean; done:
     const reachedCount = MILESTONES.filter((ms) => live.reached.indexOf(ms) !== -1).length;
 
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${MILESTONES.length}, 1fr)`, gap: '0.35rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${MILESTONES.length}, minmax(0, 1fr))`, gap: '0.3rem' }}>
             {MILESTONES.map((ms, index) => {
                 const reached = done || live.reached.indexOf(ms) !== -1;
                 const current = active && !reached && index === reachedCount;
-                const skippedBuild = ms === 'build' && live.buildSkipped;
-                const colour = reached ? C.ok : current ? C.accent : 'rgba(255,255,255,0.12)';
 
                 return (
-                    <div key={ms}>
+                    <div key={ms} style={{ minWidth: 0 }}>
                         <div
                             style={{
-                                height: 8,
-                                borderRadius: 4,
-                                background: colour,
-                                boxShadow: current ? `0 0 12px ${C.accent}` : 'none',
-                                transition: 'background 200ms ease',
+                                height: 3,
+                                borderRadius: 2,
+                                background: reached ? C.ok : current ? C.accent : 'hsl(209, 14%, 30%)',
                             }}
                         />
                         <div
                             style={{
-                                marginTop: '0.4rem',
-                                fontSize: '0.8rem',
-                                fontWeight: 600,
-                                color: reached ? C.text : current ? C.accent : C.faint,
+                                marginTop: '0.3rem',
+                                fontSize: '0.72rem',
+                                color: reached ? C.muted : current ? C.accent : C.faint,
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                             }}
                         >
-                            {skippedBuild ? t('msBuildSkipped') : t(MILESTONE_KEYS[ms])}
+                            {ms === 'build' && live.buildSkipped ? t('msBuildSkipped') : t(MILESTONE_KEYS[ms])}
                         </div>
                     </div>
                 );
@@ -153,155 +128,90 @@ const Milestones = ({ live, active, done }: { live: Live; active: boolean; done:
 
 /* ------------------------------------------------------------ lepeskartya */
 
-const Stat = ({ label, value }: { label: string; value: string }) => (
-    <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.08em', color: C.faint }}>{label}</div>
-        <div style={{ fontSize: '1.35rem', fontWeight: 700, fontFamily: MONO, color: C.text, whiteSpace: 'nowrap' }}>
-            {value}
-        </div>
-    </div>
-);
-
 const StepCard = ({
-    index,
     step,
     live,
     active,
     selected,
-    chainStarted,
     now,
     onSelect,
 }: {
-    index: number;
     step: StepState;
     live: Live;
     active: boolean;
     selected: boolean;
-    chainStarted: boolean;
     now: number;
     onSelect: () => void;
 }) => {
     const t = useT();
-    const info = describe(step, live, chainStarted);
+    const info = describe(step, live);
     const tone = TONE[info.tone];
-    const roleColour = step.role === 'primary' ? C.primary : C.backup;
     const elapsed = step.startedAt ? (step.finishedAt || now) - step.startedAt : null;
     const stats = live.stats;
-    const showMilestones = step.phase !== 'pending' && step.phase !== 'skipped';
+    const started = step.phase !== 'pending' && step.phase !== 'skipped';
+
+    const metrics = [
+        `CPU ${stats ? Math.round(stats.cpu) + '%' : '–'}`,
+        `RAM ${stats ? formatBytes(stats.memory) + (stats.memoryLimit ? ' / ' + formatBytes(stats.memoryLimit) : '') : '–'}`,
+        `${t('uptime')} ${stats && stats.state === 'running' && stats.uptime ? formatDuration(stats.uptime) : '–'}`,
+    ];
 
     return (
         <button
             type={'button'}
             onClick={onSelect}
             style={{
-                flex: '1 1 380px',
                 minWidth: 0,
                 textAlign: 'left',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '1rem',
-                padding: '1.25rem 1.4rem',
-                borderRadius: '0.9rem',
-                background: active ? 'rgba(56,189,248,0.07)' : 'rgba(255,255,255,0.03)',
-                border: `2px solid ${selected ? tone : 'rgba(255,255,255,0.08)'}`,
-                boxShadow: active ? `0 0 0 4px ${tone}22` : 'none',
+                gap: '0.65rem',
+                padding: '0.8rem 1rem',
+                borderRadius: '0.375rem',
+                background: C.deep,
+                border: `1px solid ${selected ? (active ? C.accent : C.muted) : C.border}`,
                 color: C.text,
                 cursor: 'pointer',
-                transition: 'border-color 200ms ease, box-shadow 200ms ease',
             }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.6rem', minWidth: 0 }}>
                 <span
                     style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '1.2rem',
-                        fontWeight: 800,
-                        background: roleColour,
-                        color: C.deep,
-                        flexShrink: 0,
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        letterSpacing: '0.08em',
+                        color: step.role === 'primary' ? C.primary : C.backup,
                     }}
                 >
-                    {index + 1}
+                    {step.role === 'primary' ? 'PRIMARY' : 'BACKUP'}
                 </span>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: '1.05rem', fontWeight: 800, letterSpacing: '0.12em', color: roleColour }}>
-                        {step.role === 'primary' ? 'PRIMARY' : 'BACKUP'}
-                    </div>
-                    <div
-                        style={{
-                            fontSize: '0.95rem',
-                            color: C.muted,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                        }}
-                    >
-                        {step.name}
-                    </div>
-                </div>
+                <span style={{ flex: 1, minWidth: 0, fontSize: '0.85rem', color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {step.name}
+                </span>
                 {elapsed !== null && (
-                    <span style={{ fontFamily: MONO, fontSize: '1.5rem', fontWeight: 700, color: tone }}>
-                        {formatDuration(elapsed)}
-                    </span>
+                    <span style={{ fontFamily: MONO, fontSize: '0.85rem', color: C.muted }}>{formatDuration(elapsed)}</span>
                 )}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', color: tone, minHeight: 48 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', color: tone }}>
                 <FontAwesomeIcon
-                    icon={
-                        info.spinning
-                            ? faSpinner
-                            : info.tone === 'ok'
-                            ? faCheckCircle
-                            : info.tone === 'bad'
-                            ? faExclamationTriangle
-                            : faCheck
-                    }
+                    icon={info.spinning ? faSpinner : info.tone === 'bad' ? faExclamationTriangle : faCheck}
                     spin={info.spinning}
-                    style={{ fontSize: '1.9rem' }}
+                    style={{ fontSize: '0.95rem', opacity: info.tone === 'idle' && !info.spinning ? 0 : 1 }}
                 />
-                <span style={{ fontSize: '2rem', fontWeight: 800, lineHeight: 1.1 }}>{t(info.label)}</span>
+                <span style={{ fontSize: '1.15rem', fontWeight: 600 }}>{t(info.label)}</span>
             </div>
 
-            {showMilestones && <Milestones live={live} active={active} done={step.phase === 'done'} />}
+            {started && <Milestones live={live} active={active} done={step.phase === 'done'} />}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.75rem' }}>
-                <Stat label={'CPU'} value={stats ? `${Math.round(stats.cpu)}%` : '–'} />
-                <Stat
-                    label={'RAM'}
-                    value={
-                        stats
-                            ? `${formatBytes(stats.memory)}${stats.memoryLimit ? ' / ' + formatBytes(stats.memoryLimit) : ''}`
-                            : '–'
-                    }
-                />
-                <Stat
-                    label={t('uptime')}
-                    value={stats && stats.state === 'running' && stats.uptime ? formatDuration(stats.uptime) : '–'}
-                />
+            <div style={{ fontFamily: MONO, fontSize: '0.78rem', color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {metrics.join('   ·   ')}
             </div>
 
             {live.commit && (
-                <div
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.55rem',
-                        fontFamily: MONO,
-                        fontSize: '0.9rem',
-                        color: C.muted,
-                        overflow: 'hidden',
-                        whiteSpace: 'nowrap',
-                        textOverflow: 'ellipsis',
-                    }}
-                >
-                    <FontAwesomeIcon icon={faCodeBranch} style={{ color: C.faint }} />
-                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontFamily: MONO, fontSize: '0.78rem', color: C.faint, minWidth: 0 }}>
+                    <FontAwesomeIcon icon={faCodeBranch} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {live.commit.replace(/^git:\s*/, '')}
                     </span>
                 </div>
@@ -314,35 +224,14 @@ const StepCard = ({
 
 const ConsoleRow = React.memo(({ line }: { line: ConsoleLine }) => {
     if (line.divider) {
-        return (
-            <div
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.8rem',
-                    margin: '0.8rem 0',
-                    color: C.accent,
-                    fontWeight: 700,
-                }}
-            >
-                <span style={{ flex: 1, height: 1, background: 'rgba(56,189,248,0.4)' }} />
-                {line.text}
-                <span style={{ flex: 1, height: 1, background: 'rgba(56,189,248,0.4)' }} />
-            </div>
-        );
+        return <div style={{ margin: '0.5rem 0', color: C.accent, borderTop: '1px dashed hsl(209, 14%, 30%)', paddingTop: '0.4rem' }}>{line.text}</div>;
     }
 
     const override = LEVEL_STYLE[line.level];
     const segments = parseAnsi(line.text);
 
     return (
-        <div
-            style={{
-                borderLeft: `3px solid ${LEVEL_ACCENT[line.level]}`,
-                paddingLeft: '0.7rem',
-                background: line.level === 'error' ? 'rgba(248,113,113,0.08)' : 'transparent',
-            }}
-        >
+        <div>
             {segments.length === 0
                 ? ' '
                 : segments.map((segment, index) => (
@@ -354,7 +243,7 @@ const ConsoleRow = React.memo(({ line }: { line: ConsoleLine }) => {
     );
 });
 
-const ConsoleView = ({ lines, title, connected }: { lines: ConsoleLine[]; title: string; connected: boolean }) => {
+const ConsoleView = ({ lines }: { lines: ConsoleLine[] }) => {
     const t = useT();
     const boxRef = useRef<HTMLDivElement>(null);
     const [pinned, setPinned] = useState(true);
@@ -364,59 +253,23 @@ const ConsoleView = ({ lines, title, connected }: { lines: ConsoleLine[]; title:
     }, [lines, pinned]);
 
     return (
-        <div
-            style={{
-                position: 'relative',
-                flex: 1,
-                minHeight: 360,
-                display: 'flex',
-                flexDirection: 'column',
-                borderRadius: '0.9rem',
-                border: '1px solid rgba(255,255,255,0.08)',
-                overflow: 'hidden',
-            }}
-        >
-            <div
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.7rem',
-                    padding: '0.7rem 1.1rem',
-                    background: 'rgba(255,255,255,0.04)',
-                    fontSize: '1rem',
-                    fontWeight: 700,
-                    color: C.muted,
-                }}
-            >
-                <span
-                    style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: '50%',
-                        background: connected ? C.ok : C.danger,
-                        boxShadow: connected ? `0 0 8px ${C.ok}` : 'none',
-                    }}
-                />
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {title}
-                </span>
-            </div>
-
+        <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex' }}>
             <div
                 ref={boxRef}
+                className={'so-console'}
                 onScroll={() => {
                     const box = boxRef.current;
-                    if (box) setPinned(box.scrollHeight - box.scrollTop - box.clientHeight < 60);
+                    if (box) setPinned(box.scrollHeight - box.scrollTop - box.clientHeight < 40);
                 }}
                 style={{
                     flex: 1,
                     overflowY: 'auto',
                     overflowX: 'hidden',
                     background: C.console,
-                    padding: '0.9rem 1rem',
+                    padding: '0.7rem 0.9rem',
                     fontFamily: MONO,
-                    fontSize: '0.92rem',
-                    lineHeight: 1.6,
+                    fontSize: '0.8rem',
+                    lineHeight: 1.55,
                     whiteSpace: 'pre-wrap',
                     wordBreak: 'break-word',
                     color: '#cbd5e1',
@@ -433,16 +286,7 @@ const ConsoleView = ({ lines, title, connected }: { lines: ConsoleLine[]; title:
                 <button
                     type={'button'}
                     onClick={() => setPinned(true)}
-                    style={{
-                        ...bigBtn('go'),
-                        minHeight: 48,
-                        fontSize: '1rem',
-                        padding: '0 1.2rem',
-                        position: 'absolute',
-                        right: '1.2rem',
-                        bottom: '1.2rem',
-                        boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
-                    }}
+                    style={{ ...bigBtn('plain'), height: 32, background: C.panel, position: 'absolute', right: '1rem', bottom: '0.8rem' }}
                 >
                     <FontAwesomeIcon icon={faArrowDown} /> {t('jumpToBottom')}
                 </button>
@@ -451,48 +295,7 @@ const ConsoleView = ({ lines, title, connected }: { lines: ConsoleLine[]; title:
     );
 };
 
-/* ------------------------------------------------------------------ banner */
-
-const Banner = ({ tone, title, detail }: { tone: Tone; title: string; detail?: string | null }) => (
-    <div
-        style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            padding: '1rem 1.3rem',
-            borderRadius: '0.9rem',
-            border: `2px solid ${TONE[tone]}`,
-            background: `${TONE[tone]}1a`,
-            color: TONE[tone],
-            minWidth: 0,
-            flex: '1 1 320px',
-        }}
-    >
-        <FontAwesomeIcon
-            icon={tone === 'ok' ? faCheckCircle : tone === 'busy' ? faSpinner : faExclamationTriangle}
-            spin={tone === 'busy'}
-            style={{ fontSize: '1.9rem', flexShrink: 0 }}
-        />
-        <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: '1.3rem', fontWeight: 800 }}>{title}</div>
-            {detail && (
-                <div
-                    style={{
-                        marginTop: '0.25rem',
-                        fontFamily: MONO,
-                        fontSize: '0.92rem',
-                        color: C.text,
-                        wordBreak: 'break-word',
-                    }}
-                >
-                    {detail}
-                </div>
-            )}
-        </div>
-    </div>
-);
-
-/* ------------------------------------------------------------------ kepernyo */
+/* ------------------------------------------------------------------ ablak */
 
 export default ({ title, targets, onClose }: { title: string; targets: ChainTarget[]; onClose: () => void }) => {
     const t = useT();
@@ -538,8 +341,7 @@ export default ({ title, targets, onClose }: { title: string; targets: ChainTarg
     }, [chain.running, onClose]);
 
     const labels = { restart: t('dividerRestart') };
-    const selectedTarget = targets.find((target) => target.server.uuid === selected) || targets[0];
-    const selectedLive = (selectedTarget && live[selectedTarget.server.uuid]) || null;
+    const selectedLive = live[selected] || null;
 
     const failureTitle = failed
         ? t(
@@ -553,104 +355,116 @@ export default ({ title, targets, onClose }: { title: string; targets: ChainTarg
           )
         : '';
 
-    const screen = (
+    /* egyetlen sor az allapotrol, a gombok mellett */
+    let notice: { tone: Tone; text: string; detail?: string | null } | null = null;
+    if (failed && !chain.running) {
+        notice = { tone: 'bad', text: `${failed.role === 'primary' ? 'Primary' : 'Backup'}: ${failureTitle}`, detail: failed.failureDetail };
+    } else if (allDone) {
+        notice = { tone: 'ok', text: t(targets.length > 1 ? 'chainComplete' : 'singleComplete') };
+    } else if (chain.running && chain.activeIndex !== null) {
+        notice = { tone: 'busy', text: t(chain.steps[chain.activeIndex].role === 'primary' ? 'runPrimary' : 'runBackup') };
+    } else if (!started && primary && !backup) {
+        notice = { tone: 'wait', text: t('warnNoBackup') };
+    } else if (!started && primary && backupDown) {
+        notice = { tone: 'bad', text: t('warnBackupDown') };
+    }
+
+    const popup = (
         <div
+            onClick={() => !chain.running && onClose()}
             style={{
                 position: 'fixed',
                 inset: 0,
                 zIndex: 10000,
-                background: 'radial-gradient(ellipse at top, #13202e 0%, #0a0f15 70%)',
-                color: C.text,
-                overflowY: 'auto',
+                background: 'rgba(0,0,0,0.65)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '1rem',
             }}
         >
             <div
+                onClick={(e) => e.stopPropagation()}
                 style={{
-                    minHeight: '100%',
-                    maxWidth: 1600,
-                    margin: '0 auto',
-                    padding: 'clamp(1rem, 2.5vw, 2rem)',
+                    width: '100%',
+                    maxWidth: 1180,
+                    height: 'min(880px, 94vh)',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '1.25rem',
-                    boxSizing: 'border-box',
+                    background: C.panel,
+                    border: `1px solid ${C.border}`,
+                    borderRadius: '0.5rem',
+                    color: C.text,
+                    overflow: 'hidden',
                 }}
             >
                 {/* fejlec */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                    <FontAwesomeIcon
-                        icon={faSync}
-                        spin={chain.running}
-                        style={{ fontSize: '1.9rem', color: chain.running ? C.accent : C.faint }}
-                    />
-                    <h1 style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 'clamp(1.6rem, 3vw, 2.4rem)', fontWeight: 800 }}>
-                        {title}
-                    </h1>
-                    {!chain.running && (
-                        <button type={'button'} style={{ ...bigBtn('plain'), minHeight: 52, fontSize: '1.05rem' }} onClick={onClose}>
-                            <FontAwesomeIcon icon={faTimes} /> {t('close')}
-                        </button>
-                    )}
+                <div
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.85rem 1.2rem',
+                        borderBottom: `1px solid ${C.border}`,
+                    }}
+                >
+                    <span style={{ flex: 1, minWidth: 0, fontSize: '1.1rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {t('restart')} · {title}
+                    </span>
+                    <button
+                        type={'button'}
+                        onClick={onClose}
+                        disabled={chain.running}
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: C.faint,
+                            fontSize: '1.15rem',
+                            cursor: chain.running ? 'not-allowed' : 'pointer',
+                            opacity: chain.running ? 0.3 : 1,
+                        }}
+                    >
+                        <FontAwesomeIcon icon={faTimes} />
+                    </button>
                 </div>
 
-                {/* lepesek: primary -> backup */}
-                <div style={{ display: 'flex', alignItems: 'stretch', gap: '1rem', flexWrap: 'wrap' }}>
+                {/* lepesek */}
+                <div className={'so-steps'} style={{ padding: '1rem 1.2rem 0' }}>
                     {chain.steps.map((step, index) => (
-                        <React.Fragment key={step.uuid}>
-                            {index > 0 && (
-                                <div
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        fontSize: '1.8rem',
-                                        color: chain.steps[index - 1].phase === 'done' ? C.ok : C.faint,
-                                    }}
-                                >
-                                    <FontAwesomeIcon icon={faArrowRight} />
-                                </div>
-                            )}
-                            <StepCard
-                                index={index}
-                                step={step}
-                                live={live[step.uuid]}
-                                active={chain.activeIndex === index}
-                                selected={selected === step.uuid}
-                                chainStarted={started}
-                                now={now}
-                                onSelect={() => setSelected(step.uuid)}
-                            />
-                        </React.Fragment>
+                        <StepCard
+                            key={step.uuid}
+                            step={step}
+                            live={live[step.uuid]}
+                            active={chain.activeIndex === index}
+                            selected={selected === step.uuid}
+                            now={now}
+                            onSelect={() => setSelected(step.uuid)}
+                        />
                     ))}
                 </div>
 
-                {/* fo muvelet + allapot */}
-                <div style={{ display: 'flex', alignItems: 'stretch', gap: '1rem', flexWrap: 'wrap' }}>
-                    {!started && primary && !backup && <Banner tone={'wait'} title={t('warnNoBackup')} />}
-                    {!started && primary && backupDown && <Banner tone={'bad'} title={t('warnBackupDown')} />}
+                {/* allapot + gombok */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.9rem 1.2rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+                        {notice && (
+                            <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: TONE[notice.tone], fontSize: '0.95rem' }}>
+                                    {notice.tone !== 'busy' && notice.tone !== 'ok' && <FontAwesomeIcon icon={faExclamationTriangle} />}
+                                    {notice.tone === 'ok' && <FontAwesomeIcon icon={faCheck} />}
+                                    <span>{notice.text}</span>
+                                </div>
+                                {notice.detail && (
+                                    <div style={{ marginTop: '0.3rem', fontFamily: MONO, fontSize: '0.8rem', color: C.muted, wordBreak: 'break-word' }}>
+                                        {notice.detail}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
 
-                    {chain.running && chain.activeIndex !== null && (
-                        <Banner
-                            tone={'busy'}
-                            title={t(chain.steps[chain.activeIndex].role === 'primary' ? 'runPrimary' : 'runBackup')}
-                        />
-                    )}
-
-                    {allDone && <Banner tone={'ok'} title={t(targets.length > 1 ? 'chainComplete' : 'singleComplete')} />}
-                    {failed && !chain.running && (
-                        <Banner
-                            tone={'bad'}
-                            title={`${failed.role === 'primary' ? 'PRIMARY' : 'BACKUP'}: ${failureTitle}`}
-                            detail={failed.failureDetail}
-                        />
-                    )}
-
-                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginLeft: 'auto' }}>
+                    <div style={{ display: 'flex', gap: '0.6rem' }}>
                         {!started && (
-                            <button
-                                type={'button'}
-                                style={{ ...bigBtn('go'), minWidth: 300 }}
-                                onClick={() => start(0, labels)}
-                            >
+                            <button type={'button'} style={{ ...bigBtn('go'), minWidth: 170 }} onClick={() => start(0, labels)}>
                                 <FontAwesomeIcon icon={faRedo} /> {t('startChain')}
                             </button>
                         )}
@@ -664,25 +478,42 @@ export default ({ title, targets, onClose }: { title: string; targets: ChainTarg
                                 <FontAwesomeIcon icon={faRedo} /> {t('retry')}
                             </button>
                         )}
-                        {allDone && (
-                            <button type={'button'} style={bigBtn('ok')} onClick={onClose}>
-                                <FontAwesomeIcon icon={faCheck} /> {t('close')}
+                        {!chain.running && started && (
+                            <button type={'button'} style={bigBtn('plain')} onClick={onClose}>
+                                {t('close')}
                             </button>
                         )}
                     </div>
                 </div>
 
-                {/* konzol */}
-                {selectedTarget && selectedLive && (
-                    <ConsoleView
-                        lines={selectedLive.lines}
-                        connected={selectedLive.connected}
-                        title={`${selectedTarget.role === 'primary' ? 'PRIMARY' : 'BACKUP'} · ${selectedTarget.server.name}`}
-                    />
-                )}
+                {/* konzol: a kivalasztott szervere; a fulekkel valthato */}
+                <div style={{ display: 'flex', gap: '0.25rem', padding: '0 1.2rem', borderBottom: `1px solid ${C.border}` }}>
+                    {chain.steps.map((step) => (
+                        <button
+                            key={step.uuid}
+                            type={'button'}
+                            onClick={() => setSelected(step.uuid)}
+                            style={{
+                                padding: '0.5rem 0.9rem',
+                                background: 'transparent',
+                                border: 'none',
+                                borderBottom: `2px solid ${selected === step.uuid ? C.accent : 'transparent'}`,
+                                marginBottom: -1,
+                                color: selected === step.uuid ? C.text : C.faint,
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            {t('console')} · {step.role === 'primary' ? 'Primary' : 'Backup'}
+                        </button>
+                    ))}
+                </div>
+
+                {selectedLive && <ConsoleView lines={selectedLive.lines} />}
             </div>
         </div>
     );
 
-    return createPortal(screen, document.body);
+    return createPortal(popup, document.body);
 };

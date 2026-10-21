@@ -39,15 +39,10 @@ class ServerOrganizerController extends Controller
             'data' => ['required', 'array'],
             'data.version' => ['required', 'integer', 'min:1'],
             'data.enabled' => ['required', 'boolean'],
+            // A 'role' a 3.x-es kliensektol johet meg - elfogadjuk, a frontend 'manual'-ra alakitja.
             'data.sortMode' => ['required', 'string', Rule::in(['manual', 'name', 'status', 'role'])],
             // null = a felhasznalo nem valasztott, a bongeszo nyelve dont.
             'data.language' => ['present', 'nullable', Rule::in(['en', 'hu'])],
-
-            // Lancolt ujrainditas beallitasai.
-            'data.chain' => ['present', 'array'],
-            'data.chain.readyPattern' => ['required', 'string', 'max:256'],
-            'data.chain.timeoutSeconds' => ['required', 'integer', 'min:60', 'max:7200'],
-            'data.chain.startScript' => ['required', 'string', 'max:256'],
 
             'data.groups' => ['present', 'array', 'max:100'],
             'data.groups.*.id' => ['required', 'string', 'max:64'],
@@ -63,11 +58,17 @@ class ServerOrganizerController extends Controller
             'data.servers.*.icon' => ['nullable', 'string', 'max:64'],
             // Csak http/https - igy nem lehet 'javascript:' vagy 'data:' semat becsempeszni.
             'data.servers.*.imageUrl' => ['nullable', 'string', 'max:512', 'regex:/^https?:\/\//i'],
-            'data.servers.*.role' => ['nullable', Rule::in(['primary', 'backup'])],
             'data.servers.*.order' => ['required', 'integer'],
         ]);
 
         $data = $request->input('data');
+
+        // 4.0 ota a szerep a szerver Startup ROLE valtozojabol jon, a lanc beallitasa
+        // pedig a .ptero/start.sh dolga - a regi mezoket nem taroljuk tovabb.
+        unset($data['chain']);
+        foreach ($data['servers'] as $uuid => $server) {
+            unset($data['servers'][$uuid]['role']);
+        }
 
         $encoded = json_encode($data);
         if ($encoded === false || strlen($encoded) > self::MAX_PAYLOAD_BYTES) {

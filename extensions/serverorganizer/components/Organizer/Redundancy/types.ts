@@ -1,69 +1,67 @@
-import { DEFAULT_READY_PATTERN, FailureKind, LineLevel } from './patterns';
+import type { LineLevel, Milestone } from './startsh';
 
 export interface ConsoleLine {
     text: string;
     level: LineLevel;
+    /** Elvalaszto sor ("ujrainditas 12:34:56"), nem a szerver irta. */
+    divider?: boolean;
 }
 
 export type StepPhase =
     | 'pending' // meg nem kerult sorra
-    | 'connecting' // websocket nyitasa
-    | 'sending' // restart jel kikuldve
+    | 'sending' // restart kuldve a power API-n
     | 'stopping' // leall
-    | 'starting' // indul, fut a build
+    | 'starting' // a .ptero/start.sh dolgozik (frissites, build, inditas)
+    | 'warming' // fut ("Ready in"), a start.sh bemelegit es rogziti a commitot
     | 'done'
     | 'failed'
-    | 'skipped'; // egy korabbi lepes elbukott, ezert ide el sem jutottunk
+    | 'skipped'; // egy korabbi lepes elbukott, ide el sem jutottunk
+
+export type FailureKind = 'crash' | 'timeout' | 'aborted' | 'api';
 
 export interface StepState {
     uuid: string;
-    identifier: string;
     name: string;
     role: 'primary' | 'backup';
     phase: StepPhase;
-    /** Mennyi ideje tart a lepes (csak kijelzesre, nem dont semmirol). */
-    elapsed: number;
-    /** A konzol sorai - ezt latja a felhasznalo elesben. */
-    lines: ConsoleLine[];
-    /** A mar elert build-lepesek kulcsai (PROGRESS_MARKERS). */
-    progress: string[];
-    failureKind: FailureKind | 'timeout' | 'offline' | 'aborted' | 'api' | null;
-    /** A konkret sor vagy hibauzenet, ami miatt elbukott. */
+    startedAt: number | null;
+    finishedAt: number | null;
+    failureKind: FailureKind | null;
+    /** Az utolso "HIBA:" sor a start.sh-bol, ha volt. */
     failureDetail: string | null;
+}
+
+export interface LiveStats {
+    state: string;
+    cpu: number;
+    memory: number;
+    memoryLimit: number;
+    uptime: number;
+}
+
+/** Szerverenkenti elo adat - a lanctol fuggetlenul, a kepernyo megnyitasatol. */
+export interface Live {
+    connected: boolean;
+    stats: LiveStats | null;
+    lines: ConsoleLine[];
+    /** Amit a start.sh az aktualis futasban mar elert. */
+    reached: Milestone[];
+    /** Az aktualis tevekenyseg kulcsa (i18n) es a nyers sor. */
+    activity: string | null;
+    activityDetail: string | null;
+    /** "git: 1a2b3c4 uzenet" - melyik kod fut. */
+    commit: string | null;
+    buildSkipped: boolean;
+    lastError: string | null;
 }
 
 export interface ChainState {
     running: boolean;
-    startedAt: number | null;
     steps: StepState[];
     activeIndex: number | null;
     finishedAt: number | null;
     aborted: boolean;
 }
-
-export interface ChainConfig {
-    /**
-     * Az a konzolsor, ami azt jelenti "elindultam es fogadom a kereseket".
-     * Regularis kifejezes. Nincs idozites: ez dont a sikerrol.
-     */
-    readyPattern: string;
-    /**
-     * Vegso biztonsagi hatar, hogy egy beragadt build ne varakoztasson orokke.
-     * Nem finomhangolasra valo - bo alapertekkel indul.
-     */
-    timeoutSeconds: number;
-    /**
-     * A package.json "start" scriptje, ha automatikusan javitjuk.
-     * A %PORT% helyere a Pterodactyl altal kiosztott port kerul.
-     */
-    startScript: string;
-}
-
-export const DEFAULT_CHAIN_CONFIG: ChainConfig = {
-    readyPattern: DEFAULT_READY_PATTERN,
-    timeoutSeconds: 1800,
-    startScript: 'next start -p %PORT%',
-};
 
 export const isTerminal = (phase: StepPhase): boolean =>
     phase === 'done' || phase === 'failed' || phase === 'skipped';

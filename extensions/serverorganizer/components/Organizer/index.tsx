@@ -13,9 +13,9 @@ import { C, btn } from './ui';
 import { Lang, LANGUAGES, LangProvider, STRINGS, StringKey, detectLang } from './i18n';
 import GroupSection from './GroupSection';
 import { GroupEditModal, ServerSettingsModal } from './Modals';
-import { ChainTarget, useRestartChain } from './Redundancy/chain';
-import RestartPanel from './Redundancy/RestartPanel';
-import { ChainConfig } from './Redundancy/types';
+import { ChainTarget } from './Redundancy/chain';
+import RestartScreen from './Redundancy/RestartScreen';
+import { Unit, buildUnits, repoLabel, stateRank, unitServers, useLiveStates } from './pairs';
 import OrganizerBoundary from './Boundary';
 
 const newId = () => 'g' + Math.random().toString(36).slice(2, 10);
@@ -50,7 +50,6 @@ const SORT_KEYS: Record<SortMode, StringKey> = {
     manual: 'sortManual',
     name: 'sortName',
     status: 'sortStatus',
-    role: 'sortRole',
 };
 
 const Organizer = () => {
@@ -70,9 +69,9 @@ const Organizer = () => {
     const [draggingServer, setDraggingServer] = useState<string | null>(null);
     const [dropTarget, setDropTarget] = useState<{ uuid: string; position: 'before' | 'after' } | null>(null);
     const [draggingGroup, setDraggingGroup] = useState<string | null>(null);
-    const [chainGroupId, setChainGroupId] = useState<string | null>(null);
+    const [restartUnit, setRestartUnit] = useState<Unit | null>(null);
 
-    const chain = useRestartChain();
+    const states = useLiveStates(servers);
 
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -159,6 +158,8 @@ const Organizer = () => {
         [prefs]
     );
 
+    const units = useMemo(() => (servers ? buildUnits(servers) : []), [servers]);
+
     const sections = useMemo(() => {
         if (!servers || !prefs) return [];
 
@@ -169,86 +170,60 @@ const Organizer = () => {
         const groups = [...storedGroups].sort((a, b) => a.order - b.order);
         const validIds = new Set(groups.map((g) => g.id));
 
-        const buckets = new Map<string | null, Server[]>();
+        const buckets = new Map<string | null, Unit[]>();
         groups.forEach((g) => buckets.set(g.id, []));
         buckets.set(null, []);
 
-        servers.forEach((server) => {
-            const pref = storedServers[server.uuid];
+        // Egy par a horgonya (a primary) csoportjaban es sorrendjeben jelenik meg.
+        units.forEach((unit) => {
+            const pref = storedServers[unit.anchor.uuid];
             const groupId = pref && pref.group && validIds.has(pref.group) ? pref.group : null;
-            (buckets.get(groupId) as Server[]).push(server);
+            (buckets.get(groupId) as Unit[]).push(unit);
         });
 
-        const rank = (server: Server) => {
-            if (server.status === 'suspended') return 2;
-            if (server.status === null) return 0;
-            return 1;
-        };
+        const title = (unit: Unit) => repoLabel(unit.repo) || unit.anchor.name;
+        // Egy egyseg allapota a legrosszabb tagjae: ha a backup all, a par is "baj".
+        const health = (unit: Unit) => Math.min(...unitServers(unit).map((server) => stateRank(states[server.uuid])));
+        const order = (unit: Unit) => (storedServers[unit.anchor.uuid] || defaultServerPref(0)).order;
 
-        const roleRank = (uuid: string) => {
-            const role = (storedServers[uuid] || {}).role;
-            return role === 'primary' ? 0 : role === 'backup' ? 1 : 2;
-        };
-
-        const compare = (a: Server, b: Server): number => {
+        const compare = (a: Unit, b: Unit): number => {
             switch (prefs.sortMode) {
                 case 'name':
-                    return a.name.localeCompare(b.name, 'hu', { sensitivity: 'base' });
+                    return title(a).localeCompare(title(b), 'hu', { sensitivity: 'base' });
                 case 'status':
-                    return rank(a) - rank(b) || a.name.localeCompare(b.name, 'hu');
-                case 'role':
-                    return roleRank(a.uuid) - roleRank(b.uuid) || a.name.localeCompare(b.name, 'hu');
-                default: {
-                    const ao = (storedServers[a.uuid] || defaultServerPref(0)).order;
-                    const bo = (storedServers[b.uuid] || defaultServerPref(0)).order;
-                    return ao - bo;
-                }
+                    return health(a) - health(b) || order(a) - order(b);
+                default:
+                    return order(a) - order(b);
             }
         };
 
         buckets.forEach((list) => list.sort(compare));
 
-        const result: { group: OrganizerGroup | null; servers: Server[] }[] = groups.map((group) => ({
+        const result: { group: OrganizerGroup | null; units: Unit[] }[] = groups.map((group) => ({
             group,
-            servers: buckets.get(group.id) as Server[],
+            units: buckets.get(group.id) as Unit[],
         }));
 
-        result.push({ group: null, servers: buckets.get(null) as Server[] });
+        result.push({ group: null, units: buckets.get(null) as Unit[] });
 
         return result;
-    }, [servers, prefs]);
+    }, [servers, prefs, units, states]);
 
-    /**
-     * A lanc sorrendje kotott: eloszor a backup, es csak siker utan a primary.
-     * Igy sosem fordulhat elo, hogy egyszerre mindketto all.
-     */
+    /** Kotott sorrend: eloszor a primary, es csak ha az sikeresen fent van, utana a backup. */
     const chainTargets = useMemo((): ChainTarget[] => {
-        if (!chainGroupId || !prefs) return [];
-
-        const section = sections.find((entry) => entry.group && entry.group.id === chainGroupId);
-        if (!section) return [];
-
-        const roleOf = (uuid: string) => (prefs.servers[uuid] || {}).role;
-        const backup = section.servers.find((server) => roleOf(server.uuid) === 'backup');
-        const primary = section.servers.find((server) => roleOf(server.uuid) === 'primary');
+        if (!restartUnit) return [];
 
         const targets: ChainTarget[] = [];
-        if (backup) targets.push({ server: backup, role: 'backup' });
-        if (primary) targets.push({ server: primary, role: 'primary' });
+        if (restartUnit.primary) targets.push({ server: restartUnit.primary, role: 'primary' });
+        if (restartUnit.backup) targets.push({ server: restartUnit.backup, role: 'backup' });
 
         return targets;
-    }, [chainGroupId, sections, prefs]);
-
-    const groupHasRoles = useCallback(
-        (groupServers: Server[]): boolean =>
-            !!prefs && groupServers.some((server) => !!(prefs.servers[server.uuid] || {}).role),
-        [prefs]
-    );
+    }, [restartUnit]);
 
     const membersOf = useCallback(
         (groupId: string | null): string[] => {
             const section = sections.find((s) => (s.group ? s.group.id : null) === groupId);
-            return section ? section.servers.map((s) => s.uuid) : [];
+            return section ? section.units.map((unit) => unit.anchor.uuid) : [];
         },
         [sections]
     );
@@ -297,7 +272,7 @@ const Organizer = () => {
             return;
         }
 
-        const targetSection = sections.find((s) => s.servers.some((srv) => srv.uuid === dropTarget.uuid));
+        const targetSection = sections.find((s) => s.units.some((unit) => unit.anchor.uuid === dropTarget.uuid));
         const targetGroupId = targetSection && targetSection.group ? targetSection.group.id : null;
 
         applyMove(draggingServer, targetGroupId, dropTarget.uuid, dropTarget.position);
@@ -438,8 +413,8 @@ const Organizer = () => {
                     display: 'flex',
                     flexWrap: 'wrap',
                     alignItems: 'center',
-                    gap: '0.4rem',
-                    marginBottom: '0.9rem',
+                    gap: '0.6rem',
+                    marginBottom: '1.25rem',
                 }}
             >
                 <button type={'button'} style={btn(editMode)} onClick={() => setEditMode((v) => !v)}>
@@ -455,8 +430,8 @@ const Organizer = () => {
                     style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '0.35rem',
-                        fontSize: '0.75rem',
+                        gap: '0.5rem',
+                        fontSize: '1rem',
                         color: C.faint,
                     }}
                 >
@@ -465,9 +440,10 @@ const Organizer = () => {
                         value={prefs.sortMode}
                         onChange={(e) => persist({ ...prefs, sortMode: e.target.value as SortMode })}
                         style={{
-                            padding: '0.3rem 0.4rem',
-                            fontSize: '0.75rem',
-                            borderRadius: '0.25rem',
+                            padding: '0.55rem 0.7rem',
+                            fontSize: '0.875rem',
+                            fontWeight: 600,
+                            borderRadius: '0.375rem',
                             border: `1px solid ${C.border}`,
                             background: C.panel,
                             color: C.muted,
@@ -489,8 +465,8 @@ const Organizer = () => {
 
                 <div style={{ flex: 1 }} />
 
-                {saving && <span style={{ fontSize: '0.7rem', color: C.faint }}>{t('saving')}</span>}
-                {saveError && <span style={{ fontSize: '0.7rem', color: C.danger }}>{t('saveFailed')}</span>}
+                {saving && <span style={{ fontSize: '0.85rem', color: C.faint }}>{t('saving')}</span>}
+                {saveError && <span style={{ fontSize: '0.85rem', color: C.danger }}>{t('saveFailed')}</span>}
 
                 {rootAdmin && (
                     <button type={'button'} style={btn(showAdmin)} onClick={() => setShowAdmin((v) => !v)}>
@@ -506,9 +482,10 @@ const Organizer = () => {
                             persist({ ...prefs, language: (e.target.value || null) as Lang | null })
                         }
                         style={{
-                            padding: '0.3rem 0.4rem',
-                            fontSize: '0.75rem',
-                            borderRadius: '0.25rem',
+                            padding: '0.55rem 0.7rem',
+                            fontSize: '0.875rem',
+                            fontWeight: 600,
+                            borderRadius: '0.375rem',
                             border: `1px solid ${C.border}`,
                             background: C.panel,
                             color: C.muted,
@@ -532,9 +509,9 @@ const Organizer = () => {
             </div>
 
             {/* csoportok */}
-            {sections.map(({ group, servers: groupServers }) => {
+            {sections.map(({ group, units: groupUnits }) => {
                 // A "csoport nelkul" reszt csak akkor cimkezzuk, ha van egyaltalan csoport.
-                if (!group && groupServers.length === 0 && prefs.groups.length > 0 && !editMode) {
+                if (!group && groupUnits.length === 0 && prefs.groups.length > 0 && !editMode) {
                     return null;
                 }
 
@@ -542,7 +519,8 @@ const Organizer = () => {
                     <GroupSection
                         key={group ? group.id : '__ungrouped__'}
                         group={group}
-                        servers={groupServers}
+                        units={groupUnits}
+                        states={states}
                         prefFor={prefFor}
                         editMode={editMode}
                         showHeader={!!group || prefs.groups.length > 0}
@@ -551,8 +529,7 @@ const Organizer = () => {
                         draggingGroup={draggingGroup}
                         onToggleCollapse={() => group && toggleCollapse(group.id)}
                         onEditGroup={() => group && setEditingGroup(group.id)}
-                        canRestartChain={!!group && groupHasRoles(groupServers)}
-                        onRestartChain={() => group && setChainGroupId(group.id)}
+                        onRestartUnit={(unit) => setRestartUnit(unit)}
                         onEditServer={(uuid) => setEditingServer(uuid)}
                         onServerDragStart={(uuid) => setDraggingServer(uuid)}
                         onServerDragEnd={finishServerDrag}
@@ -577,7 +554,10 @@ const Organizer = () => {
             {/* modalok */}
             {editingServerObject && (
                 <ServerSettingsModal
-                    serverName={editingServerObject.name}
+                    serverName={
+                        repoLabel((units.find((unit) => unit.anchor.uuid === editingServerObject.uuid) || { repo: null }).repo) ||
+                        editingServerObject.name
+                    }
                     pref={prefFor(editingServerObject.uuid)}
                     groups={[...(prefs.groups || [])].sort((a, b) => a.order - b.order)}
                     onClose={() => setEditingServer(null)}
@@ -591,23 +571,11 @@ const Organizer = () => {
                 />
             )}
 
-            {chainGroupId && (
-                <RestartPanel
-                    state={chain.state}
-                    config={prefs.chain}
-                    servers={servers}
+            {restartUnit && chainTargets.length > 0 && (
+                <RestartScreen
+                    title={repoLabel(restartUnit.repo) || restartUnit.anchor.name}
                     targets={chainTargets}
-                    onStart={() => chain.start(chainTargets, prefs.chain)}
-                    onConfigChange={(next: ChainConfig) => persist({ ...prefs, chain: next })}
-                    onAbort={chain.abort}
-                    onRetry={() => {
-                        chain.reset();
-                        // A reset utan a panel visszater a terv-nezetbe, ahonnan ujra indithato.
-                    }}
-                    onClose={() => {
-                        chain.reset();
-                        setChainGroupId(null);
-                    }}
+                    onClose={() => setRestartUnit(null)}
                 />
             )}
 

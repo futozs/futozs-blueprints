@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faGripVertical, faPen, faStar, faLifeRing } from '@fortawesome/free-solid-svg-icons';
+import { faGripVertical, faPen } from '@fortawesome/free-solid-svg-icons';
 import ServerRow from '@/components/dashboard/ServerRow';
 import { Server } from '@/api/server/getServer';
 import { ServerPref } from './types';
@@ -20,34 +20,6 @@ interface Props {
     onDrop: () => void;
     onEdit: () => void;
 }
-
-const RoleBadge = ({ role }: { role: 'primary' | 'backup' }) => {
-    const t = useT();
-    const isPrimary = role === 'primary';
-
-    return (
-        <span
-            title={isPrimary ? t('primaryServer') : t('backupServer')}
-            style={{
-                position: 'absolute',
-                bottom: -4,
-                right: -6,
-                width: 16,
-                height: 16,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: isPrimary ? '#fbbf24' : '#94a3b8',
-                color: C.deep,
-                fontSize: 8,
-                border: `2px solid ${C.deep}`,
-            }}
-        >
-            <FontAwesomeIcon icon={isPrimary ? faStar : faLifeRing} />
-        </span>
-    );
-};
 
 export default ({
     server,
@@ -123,7 +95,7 @@ export default ({
                 </div>
             )}
 
-            {(pref.color || icon || showImage || pref.role) && (
+            {(pref.color || icon || showImage) && (
                 <div
                     className={'so-accent'}
                     style={{
@@ -140,7 +112,7 @@ export default ({
                             background: accent,
                         }}
                     />
-                    {(icon || showImage || pref.role) && (
+                    {(icon || showImage) && (
                         <span
                             style={{
                                 position: 'relative',
@@ -169,7 +141,6 @@ export default ({
                             ) : icon ? (
                                 <FontAwesomeIcon icon={icon} />
                             ) : null}
-                            {pref.role && <RoleBadge role={pref.role} />}
                         </span>
                     )}
                 </div>

@@ -1,276 +1,380 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import http from '@/api/http';
 import getWebsocketToken from '@/api/server/getWebsocketToken';
 import { Websocket } from '@/plugins/Websocket';
 import { Server } from '@/api/server/getServer';
-import { ChainConfig, ChainState, ConsoleLine, StepState } from './types';
-import { classifyLine, compileReadyPattern } from './patterns';
+import { ChainState, ConsoleLine, FailureKind, Live, StepState } from './types';
+import { classify, messageOf } from './startsh';
 
-const MAX_LINES = 2000;
+const MAX_LINES = 3000;
+const FLUSH_MS = 120;
+/** Ennyi ido alatt a restartra valaszolnia kell a Wingsnek (lealt / indul). */
+const ACK_TIMEOUT_MS = 90 * 1000;
+/** "Ready in" utan a start.sh rogziti a commitot es bemelegit - legfeljebb eddig varunk ra. */
+const WARM_TIMEOUT_MS = 120 * 1000;
+/** Vegso biztonsagi hatar: build-zarra varas (max 15 perc) + build + inditas. */
+const STEP_TIMEOUT_MS = 60 * 60 * 1000;
 
 export interface ChainTarget {
     server: Server;
     role: 'primary' | 'backup';
 }
 
+const emptyLive = (): Live => ({
+    connected: false,
+    stats: null,
+    lines: [],
+    reached: [],
+    activity: null,
+    activityDetail: null,
+    commit: null,
+    buildSkipped: false,
+    lastError: null,
+});
+
 const makeStep = (target: ChainTarget): StepState => ({
     uuid: target.server.uuid,
-    identifier: target.server.id,
     name: target.server.name,
     role: target.role,
     phase: 'pending',
-    elapsed: 0,
-    lines: [],
-    progress: [],
+    startedAt: null,
+    finishedAt: null,
     failureKind: null,
     failureDetail: null,
 });
 
-const EMPTY: ChainState = {
-    running: false,
-    startedAt: null,
-    steps: [],
-    activeIndex: null,
-    finishedAt: null,
-    aborted: false,
-};
+const clock = () => new Date().toLocaleTimeString('hu-HU', { hour12: false });
+
+type Listener = (uuid: string, kind: 'status' | 'line', value: string) => void;
 
 /**
- * Egyetlen szerver ujrainditasa, es varakozas arra, hogy tenylegesen keszen
- * alljon.
+ * A teljes kepernyos ujrainditas motorja.
  *
- * A siker feltetele NEM ido, hanem az alkalmazas sajat visszajelzese: a
- * konzolon megjelenik a "kesz vagyok" sor (Next.js eseten "Ready in ...").
- * Egy build percekig is tarthat - nincs ertelme masodperceket tippelni.
+ * Megnyitaskor minden erintett szerverhez websocketet nyit (elo konzol +
+ * eroforrasok), a lanc pedig sorban, a POWER API-n kuldi a restartot:
+ * eloszor a primary, es csak ha az sikeresen fent van, utana a backup.
  *
- * Ket csapdat kell kikerulni:
- *
- *  1. A Wings a csatlakozaskor visszakuldi a KORABBI konzol-elozmenyt. Ha abban
- *     benne van egy regi "Ready in", azonnal - es hamisan - sikert jeleznenk.
- *     Ezert a kesz-jelzest csak azutan fogadjuk el, hogy a szervert lattuk
- *     lemenni vagy elindulni.
- *
- *  2. A csatlakozas pillanataban az allapot meg 'running' (hiszen meg el sem
- *     kuldtuk az ujrainditast). Ezert szakaszokban haladunk.
+ * A siker forrasa a Wings allapota: az egg "done" jele a "Ready in", vagyis
+ * 'running' = a Next.js tenyleg kiszolgal. Utana megvarjuk a start.sh
+ * "bemelegítve" sorat - addigra a primary mar rogzitette a futo commitot,
+ * amit a backup kovetni fog.
  */
-const runStep = (
-    target: ChainTarget,
-    config: ChainConfig,
-    patch: (partial: Partial<StepState>) => void,
-    appendLine: (line: ConsoleLine) => void,
-    markProgress: (key: string) => void,
-    clearOutput: () => void,
-    shouldAbort: () => boolean,
-    registerSocket: (socket: Websocket) => void
-): Promise<boolean> =>
-    new Promise((resolve) => {
-        let settled = false;
-        let socket: Websocket | null = null;
-        let stage: 'init' | 'awaitingDown' | 'awaitingUp' | 'up' = 'init';
-        let ticker: ReturnType<typeof setInterval> | null = null;
-        const startedAt = Date.now();
-        const readyPattern = compileReadyPattern(config.readyPattern);
+export const useChain = (targets: ChainTarget[]) => {
+    const targetsKey = targets.map((target) => target.server.uuid).join(',');
 
-        const cleanup = () => {
-            if (ticker) clearInterval(ticker);
-            if (socket) {
+    const [live, setLive] = useState<Record<string, Live>>(() =>
+        targets.reduce((acc, target) => ({ ...acc, [target.server.uuid]: emptyLive() }), {})
+    );
+    const [chain, setChain] = useState<ChainState>(() => ({
+        running: false,
+        steps: targets.map(makeStep),
+        activeIndex: null,
+        finishedAt: null,
+        aborted: false,
+    }));
+
+    const liveRef = useRef(live);
+    liveRef.current = live;
+    const listeners = useRef(new Set<Listener>());
+    const abortRef = useRef(false);
+    const mounted = useRef(true);
+
+    /* --------------------------------------------- kotegelt konzol-frissites */
+
+    const pending = useRef<Record<string, ((prev: Live) => Live)[]>>({});
+    const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const flush = useCallback(() => {
+        flushTimer.current = null;
+        const queued = pending.current;
+        pending.current = {};
+        if (!mounted.current) return;
+
+        setLive((prev) => {
+            const next = { ...prev };
+            Object.keys(queued).forEach((uuid) => {
+                next[uuid] = queued[uuid].reduce((acc, fn) => fn(acc), next[uuid] || emptyLive());
+            });
+            return next;
+        });
+    }, []);
+
+    const update = useCallback(
+        (uuid: string, fn: (prev: Live) => Live) => {
+            (pending.current[uuid] = pending.current[uuid] || []).push(fn);
+            if (!flushTimer.current) flushTimer.current = setTimeout(flush, FLUSH_MS);
+        },
+        [flush]
+    );
+
+    const pushLine = (prev: Live, line: ConsoleLine): Live => ({
+        ...prev,
+        lines: prev.lines.length >= MAX_LINES ? [...prev.lines.slice(-MAX_LINES + 1), line] : [...prev.lines, line],
+    });
+
+    const onLine = useCallback(
+        (uuid: string, raw: string) => {
+            const verdict = classify(raw);
+            const rule = verdict.rule;
+
+            update(uuid, (prev) => {
+                let next = pushLine(prev, { text: raw, level: verdict.level });
+
+                if (rule) {
+                    if (rule.milestone && next.reached.indexOf(rule.milestone) === -1) {
+                        next = { ...next, reached: [...next.reached, rule.milestone] };
+                    }
+                    if (rule.activity) {
+                        next = { ...next, activity: rule.activity, activityDetail: messageOf(verdict.clean) };
+                    }
+                    if (rule.buildSkipped) next = { ...next, buildSkipped: true };
+                    if (rule.commit) next = { ...next, commit: messageOf(verdict.clean) };
+                    if (rule.error) next = { ...next, lastError: messageOf(verdict.clean) };
+                }
+
+                return next;
+            });
+
+            listeners.current.forEach((listener) => listener(uuid, 'line', verdict.clean));
+        },
+        [update]
+    );
+
+    /** Az uj futas kezdete: elvalaszto a konzolba, a korabbi futas adatai torlodnek. */
+    const beginRun = useCallback(
+        (uuid: string, label: string) => {
+            update(uuid, (prev) => ({
+                ...pushLine(prev, { text: `${label} ${clock()}`, level: 'start', divider: true }),
+                reached: [],
+                activity: null,
+                activityDetail: null,
+                buildSkipped: false,
+                lastError: null,
+            }));
+        },
+        [update]
+    );
+
+    /* ----------------------------------------------------- websocketek */
+
+    const sockets = useRef<Record<string, Websocket>>({});
+
+    useEffect(() => {
+        mounted.current = true;
+        let disposed = false;
+
+        targets.forEach(({ server }) => {
+            const uuid = server.uuid;
+            let historyRequested = false;
+
+            const refresh = (socket: Websocket) =>
+                getWebsocketToken(uuid)
+                    .then(({ token }) => socket.setToken(token, true))
+                    .catch(() => undefined);
+
+            getWebsocketToken(uuid)
+                .then(({ token, socket: url }) => {
+                    if (disposed) return;
+
+                    const socket = new Websocket();
+                    sockets.current[uuid] = socket;
+
+                    socket.on('auth success', () => {
+                        update(uuid, (prev) => ({ ...prev, connected: true }));
+                        // Az elozmenyt csak egyszer kerjuk, kulonben ujracsatlakozaskor duplazodna.
+                        if (!historyRequested) {
+                            historyRequested = true;
+                            socket.send('send logs');
+                        }
+                        socket.send('send stats');
+                    });
+
+                    socket.on('SOCKET_CLOSE', () => update(uuid, (prev) => ({ ...prev, connected: false })));
+                    socket.on('token expiring', () => refresh(socket));
+                    socket.on('token expired', () => refresh(socket));
+
+                    socket.on('status', (state: string) => {
+                        update(uuid, (prev) => ({
+                            ...prev,
+                            stats: prev.stats
+                                ? { ...prev.stats, state }
+                                : { state, cpu: 0, memory: 0, memoryLimit: 0, uptime: 0 },
+                        }));
+                        listeners.current.forEach((listener) => listener(uuid, 'status', state));
+                    });
+
+                    socket.on('stats', (json: string) => {
+                        try {
+                            const data = JSON.parse(json);
+                            update(uuid, (prev) => ({
+                                ...prev,
+                                stats: {
+                                    state: data.state,
+                                    cpu: data.cpu_absolute,
+                                    memory: data.memory_bytes,
+                                    memoryLimit: data.memory_limit_bytes,
+                                    uptime: data.uptime,
+                                },
+                            }));
+                        } catch (error) {
+                            /* hibas stats csomag - a kovetkezo jo lesz */
+                        }
+                    });
+
+                    socket.on('console output', (line: string) => onLine(uuid, line));
+                    socket.on('daemon message', (line: string) => onLine(uuid, `[Wings] ${line}`));
+
+                    socket.setToken(token).connect(url);
+                })
+                .catch(() => update(uuid, (prev) => ({ ...prev, connected: false, lastError: 'websocket' })));
+        });
+
+        return () => {
+            disposed = true;
+            mounted.current = false;
+            abortRef.current = true;
+            if (flushTimer.current) clearTimeout(flushTimer.current);
+            Object.keys(sockets.current).forEach((uuid) => {
                 try {
-                    socket.removeAllListeners();
-                    socket.close();
+                    sockets.current[uuid].removeAllListeners();
+                    sockets.current[uuid].close();
                 } catch (error) {
                     /* a bontas hibaja mar nem erdekes */
                 }
-            }
+            });
+            sockets.current = {};
         };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [targetsKey]);
 
-        const fail = (kind: StepState['failureKind'], detail: string | null) => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            patch({ phase: 'failed', failureKind: kind, failureDetail: detail });
-            resolve(false);
-        };
-
-        const succeed = () => {
-            if (settled) return;
-            settled = true;
-            cleanup();
-            patch({ phase: 'done' });
-            resolve(true);
-        };
-
-        /** Az ujrainditas utani szakasz - innentol erdekes barmi, amit latunk. */
-        const isFresh = () => stage === 'awaitingUp' || stage === 'up';
-
-        patch({ phase: 'connecting' });
-
-        getWebsocketToken(target.server.uuid)
-            .then(({ token, socket: url }) => {
-                if (settled) return;
-
-                socket = new Websocket();
-                registerSocket(socket);
-
-                socket.on('console output', (line: string) => {
-                    // A regi elozmenyt eldobjuk: az meg az elozo futashoz tartozik.
-                    if (stage === 'init') return;
-
-                    const verdict = classifyLine(line, readyPattern);
-
-                    appendLine({ text: line, level: verdict.level });
-
-                    if (!isFresh()) return;
-
-                    if (verdict.progressKey) {
-                        markProgress(verdict.progressKey);
-                    }
-
-                    if (verdict.failure) {
-                        fail(verdict.failure.kind, line.trim().slice(0, 400));
-                        return;
-                    }
-
-                    if (verdict.ready) {
-                        // Ez az egyetlen sikerfeltetel: az app kiirta hogy kesz.
-                        succeed();
-                    }
-                });
-
-                socket.on('status', (next: string) => {
-                    if (stage === 'init') {
-                        // Meg el sem kuldtuk az ujrainditast: ez a kiindulasi allapot.
-                        return;
-                    }
-
-                    if (stage === 'awaitingDown') {
-                        if (next === 'stopping' || next === 'offline' || next === 'starting') {
-                            stage = 'awaitingUp';
-                            // Innentol a kimenet mar az uj futashoz tartozik.
-                            clearOutput();
-                            patch({ phase: next === 'starting' ? 'starting' : 'stopping' });
-                        }
-                        return;
-                    }
-
-                    if (stage === 'awaitingUp') {
-                        if (next === 'running') {
-                            stage = 'up';
-                            patch({ phase: 'starting' });
-                        } else if (next === 'starting') {
-                            patch({ phase: 'starting' });
-                        }
-                        return;
-                    }
-
-                    if (stage === 'up' && next !== 'running') {
-                        // Mar futott, es megis lement - a build vagy az app elszallt.
-                        fail('crash', next);
-                    }
-                });
-
-                socket.on('daemon error', (message: string) => fail('api', String(message)));
-                socket.on('SOCKET_CONNECT_ERROR', () => fail('api', 'websocket'));
-
-                socket.on('auth success', () => {
-                    if (settled || stage !== 'init') return;
-
-                    stage = 'awaitingDown';
-                    patch({ phase: 'sending' });
-                    // Ugyanaz a csatorna, amit a panel sajat power gombjai hasznalnak.
-                    socket?.send('set state', 'restart');
-                });
-
-                socket.setToken(token).connect(url);
-
-                ticker = setInterval(() => {
-                    if (settled) return;
-
-                    if (shouldAbort()) {
-                        fail('aborted', null);
-                        return;
-                    }
-
-                    const elapsed = Math.round((Date.now() - startedAt) / 1000);
-                    patch({ elapsed });
-
-                    if (elapsed >= config.timeoutSeconds) {
-                        fail('timeout', null);
-                    }
-                }, 1000);
-            })
-            .catch(() => fail('api', 'token'));
-    });
-
-export const useRestartChain = () => {
-    const [state, setState] = useState<ChainState>(EMPTY);
-    const abortRef = useRef(false);
-    const socketsRef = useRef<Websocket[]>([]);
+    /* ---------------------------------------------------------- lanc */
 
     const patchStep = useCallback((index: number, partial: Partial<StepState>) => {
-        setState((prev) => ({
+        if (!mounted.current) return;
+        setChain((prev) => ({
             ...prev,
             steps: prev.steps.map((step, i) => (i === index ? { ...step, ...partial } : step)),
         }));
     }, []);
 
-    const appendLine = useCallback((index: number, line: ConsoleLine) => {
-        setState((prev) => ({
-            ...prev,
-            steps: prev.steps.map((step, i) =>
-                i === index ? { ...step, lines: [...step.lines, line].slice(-MAX_LINES) } : step
-            ),
-        }));
-    }, []);
+    const runStep = (index: number, labels: { restart: string }): Promise<boolean> =>
+        new Promise((resolve) => {
+            const uuid = targets[index].server.uuid;
+            const startedAt = Date.now();
+            let stage: 'sending' | 'awaitDown' | 'up' | 'warming' = 'sending';
+            let sawStart = false;
+            let settled = false;
+            let warmSince = 0;
 
-    const markProgress = useCallback((index: number, key: string) => {
-        setState((prev) => ({
-            ...prev,
-            steps: prev.steps.map((step, i) =>
-                i === index && step.progress.indexOf(key) === -1
-                    ? { ...step, progress: [...step.progress, key] }
-                    : step
-            ),
-        }));
-    }, []);
+            const finish = (ok: boolean, kind: FailureKind | null = null) => {
+                if (settled) return;
+                settled = true;
+                listeners.current.delete(listener);
+                clearInterval(ticker);
 
-    const clearOutput = useCallback((index: number) => {
-        setState((prev) => ({
-            ...prev,
-            steps: prev.steps.map((step, i) => (i === index ? { ...step, lines: [], progress: [] } : step)),
-        }));
-    }, []);
+                const detail = kind === 'crash' ? (liveRef.current[uuid] || emptyLive()).lastError : null;
+                patchStep(index, {
+                    phase: ok ? 'done' : 'failed',
+                    finishedAt: Date.now(),
+                    failureKind: kind,
+                    failureDetail: detail,
+                });
+                resolve(ok);
+            };
+
+            const listener: Listener = (who, kind, value) => {
+                if (who !== uuid || settled) return;
+
+                if (kind === 'line') {
+                    if (stage === 'warming' && /bemelegítve/.test(value)) finish(true);
+                    return;
+                }
+
+                if (stage === 'awaitDown') {
+                    if (value === 'stopping' || value === 'offline' || value === 'starting') {
+                        stage = 'up';
+                        beginRun(uuid, labels.restart);
+                        sawStart = value === 'starting';
+                        patchStep(index, { phase: sawStart ? 'starting' : 'stopping' });
+                    }
+                    return;
+                }
+
+                if (stage === 'up') {
+                    if (value === 'starting') {
+                        sawStart = true;
+                        patchStep(index, { phase: 'starting' });
+                    } else if (value === 'running' && sawStart) {
+                        stage = 'warming';
+                        warmSince = Date.now();
+                        patchStep(index, { phase: 'warming' });
+                    } else if (value === 'offline' && sawStart) {
+                        // A start.sh kilepett (build hiba, HIBA: sor) - a szerver nem jott fel.
+                        finish(false, 'crash');
+                    }
+                    return;
+                }
+
+                if (stage === 'warming' && value !== 'running') {
+                    finish(false, 'crash');
+                }
+            };
+
+            listeners.current.add(listener);
+            patchStep(index, { phase: 'sending', startedAt, finishedAt: null, failureKind: null, failureDetail: null });
+
+            const ticker = setInterval(() => {
+                if (settled) return;
+                const now = Date.now();
+
+                if (abortRef.current) finish(false, 'aborted');
+                else if (stage === 'awaitDown' && now - startedAt > ACK_TIMEOUT_MS) finish(false, 'api');
+                else if (stage === 'warming' && now - warmSince > WARM_TIMEOUT_MS) finish(true);
+                else if (now - startedAt > STEP_TIMEOUT_MS) finish(false, 'timeout');
+            }, 1000);
+
+            // Az allapotvaltast a websocket hozza - elobb az legyen elo, csak utana kuldjuk a restartot.
+            const waitConnected = (tries: number): Promise<void> =>
+                (liveRef.current[uuid] || emptyLive()).connected || tries <= 0
+                    ? Promise.resolve()
+                    : new Promise((r) => setTimeout(r, 500)).then(() => waitConnected(tries - 1));
+
+            waitConnected(30)
+                .then(() => {
+                    if (settled) return;
+                    stage = 'awaitDown';
+                    return http.post(`/api/client/servers/${uuid}/power`, { signal: 'restart' });
+                })
+                .catch(() => finish(false, 'api'));
+        });
 
     const start = useCallback(
-        async (targets: ChainTarget[], config: ChainConfig) => {
+        async (fromIndex: number, labels: { restart: string }) => {
             abortRef.current = false;
-            socketsRef.current = [];
 
-            setState({
+            setChain((prev) => ({
+                ...prev,
                 running: true,
-                startedAt: Date.now(),
-                steps: targets.map(makeStep),
-                activeIndex: 0,
                 finishedAt: null,
                 aborted: false,
-            });
+                activeIndex: fromIndex,
+                steps: prev.steps.map((step, i) =>
+                    i >= fromIndex
+                        ? { ...step, phase: 'pending', startedAt: null, finishedAt: null, failureKind: null, failureDetail: null }
+                        : step
+                ),
+            }));
 
-            for (let i = 0; i < targets.length; i++) {
-                setState((prev) => ({ ...prev, activeIndex: i }));
+            for (let i = fromIndex; i < targets.length; i++) {
+                if (!mounted.current) return;
+                setChain((prev) => ({ ...prev, activeIndex: i }));
 
-                const ok = await runStep(
-                    targets[i],
-                    config,
-                    (partial) => patchStep(i, partial),
-                    (line) => appendLine(i, line),
-                    (key) => markProgress(i, key),
-                    () => clearOutput(i),
-                    () => abortRef.current,
-                    (socket) => socketsRef.current.push(socket)
-                );
+                const ok = await runStep(i, labels);
 
                 if (!ok) {
-                    // A tobbi lepes el sem indul: ha a backup nem jott vissza, a
-                    // primaryhoz hozza sem nyulunk.
-                    setState((prev) => ({
+                    // A primary nem jott fel -> a backuphoz hozza sem nyulunk: az viszi tovabb az oldalt.
+                    if (!mounted.current) return;
+                    setChain((prev) => ({
                         ...prev,
                         running: false,
                         activeIndex: null,
@@ -284,28 +388,17 @@ export const useRestartChain = () => {
                 }
             }
 
-            setState((prev) => ({ ...prev, running: false, activeIndex: null, finishedAt: Date.now() }));
+            if (mounted.current) {
+                setChain((prev) => ({ ...prev, running: false, activeIndex: null, finishedAt: Date.now() }));
+            }
         },
-        [patchStep, appendLine, markProgress, clearOutput]
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [targetsKey]
     );
 
     const abort = useCallback(() => {
         abortRef.current = true;
     }, []);
 
-    const reset = useCallback(() => {
-        abortRef.current = true;
-        socketsRef.current.forEach((socket) => {
-            try {
-                socket.removeAllListeners();
-                socket.close();
-            } catch (error) {
-                /* nem erdekes */
-            }
-        });
-        socketsRef.current = [];
-        setState(EMPTY);
-    }, []);
-
-    return { state, start, abort, reset };
+    return { live, chain, start, abort };
 };

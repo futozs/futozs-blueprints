@@ -1,18 +1,12 @@
 import http from '@/api/http';
 import { OrganizerPrefs, defaultPrefs, PREFS_VERSION } from './types';
-import { DEFAULT_CHAIN_CONFIG } from './Redundancy/types';
 
 const ENDPOINT = '/api/client/extensions/serverorganizer/prefs';
 
-const clampNumber = (value: any, min: number, max: number, fallback: number): number => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed)) return fallback;
-    return Math.min(max, Math.max(min, Math.round(parsed)));
-};
-
 /**
  * A szerverrol erkezo dokumentumot osszefesuljuk az alapertelmezessel, hogy egy
- * regebbi verzioban mentett (vagy hianyos) rekord se torje el a felulete.
+ * regebbi verzioban mentett (vagy hianyos) rekord se torje el a feluletet.
+ * A 3.x-es mezok (chain, servers.*.role, sortMode 'role') itt csendben kiesnek.
  */
 const normalize = (raw: any): OrganizerPrefs => {
     const base = defaultPrefs();
@@ -24,19 +18,8 @@ const normalize = (raw: any): OrganizerPrefs => {
     return {
         version: PREFS_VERSION,
         enabled: typeof raw.enabled === 'boolean' ? raw.enabled : base.enabled,
-        sortMode: ['manual', 'name', 'status', 'role'].includes(raw.sortMode) ? raw.sortMode : base.sortMode,
+        sortMode: ['manual', 'name', 'status'].includes(raw.sortMode) ? raw.sortMode : base.sortMode,
         language: raw.language === 'hu' || raw.language === 'en' ? raw.language : null,
-        chain: {
-            readyPattern:
-                typeof raw.chain?.readyPattern === 'string' && raw.chain.readyPattern.trim()
-                    ? raw.chain.readyPattern.slice(0, 256)
-                    : DEFAULT_CHAIN_CONFIG.readyPattern,
-            timeoutSeconds: clampNumber(raw.chain?.timeoutSeconds, 60, 7200, DEFAULT_CHAIN_CONFIG.timeoutSeconds),
-            startScript:
-                typeof raw.chain?.startScript === 'string' && raw.chain.startScript.trim()
-                    ? raw.chain.startScript.slice(0, 256)
-                    : DEFAULT_CHAIN_CONFIG.startScript,
-        },
         groups: Array.isArray(raw.groups)
             ? raw.groups
                   .filter((group: any) => group && typeof group.id === 'string' && typeof group.name === 'string')
@@ -60,7 +43,6 @@ const normalize = (raw: any): OrganizerPrefs => {
                           color: typeof pref.color === 'string' ? pref.color : null,
                           icon: typeof pref.icon === 'string' ? pref.icon : null,
                           imageUrl: typeof pref.imageUrl === 'string' ? pref.imageUrl : null,
-                          role: pref.role === 'primary' || pref.role === 'backup' ? pref.role : null,
                           order: typeof pref.order === 'number' ? pref.order : 0,
                       };
                       return acc;

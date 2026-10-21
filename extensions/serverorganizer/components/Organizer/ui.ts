@@ -14,16 +14,24 @@ export const C = {
     faint: 'hsl(211, 10%, 53%)', // neutral-400
     accent: '#38bdf8',
     danger: '#ef4444',
+    ok: '#34d399',
+    warn: '#fbbf24',
+    primary: '#fbbf24',
+    backup: '#a5b4fc',
+    console: '#0b1016',
 };
+
+export const MONO = "'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace";
 
 export const btn = (active = false): CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '0.35rem',
-    padding: '0.35rem 0.7rem',
-    fontSize: '0.75rem',
+    gap: '0.45rem',
+    padding: '0.55rem 0.95rem',
+    fontSize: '0.875rem',
+    fontWeight: 600,
     lineHeight: 1.2,
-    borderRadius: '0.25rem',
+    borderRadius: '0.375rem',
     border: `1px solid ${active ? C.accent : C.border}`,
     background: active ? 'rgba(56, 189, 248, 0.15)' : C.panel,
     color: active ? C.accent : C.muted,
@@ -31,13 +39,58 @@ export const btn = (active = false): CSSProperties => ({
     whiteSpace: 'nowrap',
 });
 
+export type BigKind = 'go' | 'danger' | 'ok' | 'plain';
+
+const BIG: Record<BigKind, { bg: string; fg: string; border: string }> = {
+    go: { bg: '#0284c7', fg: '#fff', border: '#38bdf8' },
+    danger: { bg: 'rgba(239,68,68,0.12)', fg: '#fca5a5', border: '#ef4444' },
+    ok: { bg: '#059669', fg: '#fff', border: '#34d399' },
+    plain: { bg: C.panel, fg: C.text, border: C.border },
+};
+
+/** Nagy, egyertelmu gomb - a lanc fo muveleteihez. */
+export const bigBtn = (kind: BigKind, disabled = false): CSSProperties => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.7rem',
+    minHeight: 64,
+    padding: '0 2rem',
+    fontSize: '1.25rem',
+    fontWeight: 700,
+    letterSpacing: '0.01em',
+    borderRadius: '0.6rem',
+    border: `2px solid ${BIG[kind].border}`,
+    background: BIG[kind].bg,
+    color: BIG[kind].fg,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.5 : 1,
+    whiteSpace: 'nowrap',
+});
+
 export const inputStyle: CSSProperties = {
     width: '100%',
-    padding: '0.45rem 0.6rem',
-    fontSize: '0.85rem',
-    borderRadius: '0.25rem',
+    padding: '0.6rem 0.75rem',
+    fontSize: '0.95rem',
+    borderRadius: '0.375rem',
     border: `1px solid ${C.border}`,
     background: C.deep,
     color: C.text,
     outline: 'none',
+};
+
+export const formatBytes = (bytes: number): string => {
+    if (!bytes || bytes < 0) return '0 MB';
+    const mb = bytes / 1024 / 1024;
+    return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
+};
+
+export const formatDuration = (ms: number): string => {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 };

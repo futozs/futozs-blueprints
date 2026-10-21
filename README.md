@@ -9,7 +9,7 @@ independently, so installing one never drags in the others.
 
 | Extension | Description |
 |---|---|
-| [serverorganizer](extensions/serverorganizer) | Groups, colours, icons, drag & drop ordering and primary/backup markers for the client dashboard, plus chained restart for redundant pairs. English and Hungarian UI. |
+| [serverorganizer](extensions/serverorganizer) | Groups, colours, icons and drag & drop ordering for the client dashboard; primary/backup pairs detected automatically and shown on one card with live state; one-button full-screen restart (primary first, then backup). English and Hungarian UI. |
 
 ## Installing
 

@@ -1,9 +1,9 @@
 info:
   name: "Server Organizer"
   identifier: "serverorganizer"
-  description: "Csoportositsd, szinezd es rendezd a szervereidet, es inditsd ujra a redundans parokat egyetlen gombbal - eloszor a backup, utana a primary, elo visszajelzessel."
+  description: "Csoportok, szinek, primary/backup parkartyak elo allapottal, es egygombos ujrainditas: elobb a primary, utana a backup - teljes kepernyos konzollal."
   flags: ""
-  version: "3.0.1"
+  version: "4.0.0"
   target: "beta-2026-06"
   author: "Futó Zsombor"
   icon: ""

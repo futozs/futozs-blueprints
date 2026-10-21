@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTimes, faBan, faTrash } from '@fortawesome/free-solid-svg-icons';
-import { OrganizerGroup, ServerPref, ServerRole } from './types';
+import { OrganizerGroup, ServerPref } from './types';
 import { ICONS, ICON_KEYS, PRESET_COLORS, resolveIcon } from './icons';
 import { C, btn, inputStyle } from './ui';
 import { useT } from './i18n';
@@ -13,7 +13,7 @@ export const Modal = ({
     onClose,
     children,
     footer,
-    maxWidth = 480,
+    maxWidth = 720,
 }: {
     title: string;
     onClose: () => void;
@@ -27,7 +27,7 @@ export const Modal = ({
         style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.6)',
+            background: 'rgba(0,0,0,0.7)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -40,11 +40,12 @@ export const Modal = ({
             style={{
                 width: '100%',
                 maxWidth,
-                maxHeight: '88vh',
+                maxHeight: '92vh',
                 overflowY: 'auto',
                 background: C.panel,
                 border: `1px solid ${C.border}`,
-                borderRadius: '0.4rem',
+                borderRadius: '0.9rem',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
                 color: C.text,
             }}
         >
@@ -53,29 +54,29 @@ export const Modal = ({
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '0.75rem 1rem',
+                    padding: '1.1rem 1.5rem',
                     borderBottom: `1px solid ${C.border}`,
                 }}
             >
-                <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{title}</span>
+                <span style={{ fontSize: '1.4rem', fontWeight: 800 }}>{title}</span>
                 <button
                     type={'button'}
                     onClick={onClose}
-                    style={{ background: 'transparent', border: 'none', color: C.faint, cursor: 'pointer' }}
+                    style={{ background: 'transparent', border: 'none', color: C.faint, cursor: 'pointer', fontSize: '1.5rem' }}
                 >
                     <FontAwesomeIcon icon={faTimes} />
                 </button>
             </div>
 
-            <div style={{ padding: '1rem' }}>{children}</div>
+            <div style={{ padding: '1.25rem 1.5rem 1.5rem' }}>{children}</div>
 
             {footer && (
                 <div
                     style={{
                         display: 'flex',
                         justifyContent: 'flex-end',
-                        gap: '0.5rem',
-                        padding: '0.75rem 1rem',
+                        gap: '0.75rem',
+                        padding: '1.1rem 1.5rem',
                         borderTop: `1px solid ${C.border}`,
                     }}
                 >
@@ -89,12 +90,13 @@ export const Modal = ({
 const Label = ({ children }: { children: React.ReactNode }) => (
     <div
         style={{
-            fontSize: '0.7rem',
+            fontSize: '0.85rem',
+            fontWeight: 700,
             textTransform: 'uppercase',
-            letterSpacing: '0.05em',
+            letterSpacing: '0.08em',
             color: C.faint,
-            marginBottom: '0.35rem',
-            marginTop: '0.9rem',
+            marginBottom: '0.5rem',
+            marginTop: '1.25rem',
         }}
     >
         {children}
@@ -113,8 +115,8 @@ export const ColorPicker = ({ value, onChange }: { value: string | null; onChang
             onClick={() => onChange(null)}
             title={t('noColour')}
             style={{
-                width: 24,
-                height: 24,
+                width: 34,
+                height: 34,
                 borderRadius: '50%',
                 border: `1px solid ${value === null ? C.accent : C.border}`,
                 background: 'transparent',
@@ -132,8 +134,8 @@ export const ColorPicker = ({ value, onChange }: { value: string | null; onChang
                 type={'button'}
                 onClick={() => onChange(color)}
                 style={{
-                    width: 24,
-                    height: 24,
+                    width: 34,
+                    height: 34,
                     borderRadius: '50%',
                     background: color,
                     border: value === color ? `2px solid ${C.text}` : '1px solid transparent',
@@ -148,8 +150,8 @@ export const ColorPicker = ({ value, onChange }: { value: string | null; onChang
             onChange={(e) => onChange(e.target.value)}
             title={t('customColour')}
             style={{
-                width: 28,
-                height: 24,
+                width: 40,
+                height: 34,
                 padding: 0,
                 border: `1px solid ${C.border}`,
                 borderRadius: '0.2rem',
@@ -189,9 +191,9 @@ export const IconPicker = ({
             <div
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(34px, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(44px, 1fr))',
                     gap: '0.25rem',
-                    maxHeight: 160,
+                    maxHeight: 220,
                     overflowY: 'auto',
                     padding: '0.25rem',
                     background: C.deep,
@@ -204,7 +206,7 @@ export const IconPicker = ({
                     onClick={() => onChange(null)}
                     title={t('noIcon')}
                     style={{
-                        height: 30,
+                        height: 40,
                         borderRadius: '0.2rem',
                         border: value === null ? `1px solid ${C.accent}` : '1px solid transparent',
                         background: 'transparent',
@@ -222,7 +224,7 @@ export const IconPicker = ({
                         title={key}
                         onClick={() => onChange(key)}
                         style={{
-                            height: 30,
+                            height: 40,
                             borderRadius: '0.2rem',
                             border: value === key ? `1px solid ${C.accent}` : '1px solid transparent',
                             background: value === key ? 'rgba(56,189,248,0.12)' : 'transparent',
@@ -306,20 +308,6 @@ export const ServerSettingsModal = ({
                 ))}
             </select>
 
-            <Label>{t('role')}</Label>
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
-                {([null, 'primary', 'backup'] as ServerRole[]).map((role) => (
-                    <button
-                        key={String(role)}
-                        type={'button'}
-                        style={btn(draft.role === role)}
-                        onClick={() => setDraft({ ...draft, role })}
-                    >
-                        {role === null ? t('roleNone') : role === 'primary' ? t('rolePrimary') : t('roleBackup')}
-                    </button>
-                ))}
-            </div>
-
             <Label>{t('colour')}</Label>
             <ColorPicker value={draft.color} onChange={(color) => setDraft({ ...draft, color })} />
 
@@ -344,9 +332,6 @@ export const ServerSettingsModal = ({
             {urlError && (
                 <div style={{ color: C.danger, fontSize: '0.7rem', marginTop: '0.3rem' }}>{urlError}</div>
             )}
-            <div style={{ color: C.faint, fontSize: '0.7rem', marginTop: '0.3rem' }}>
-{t('imageHelp')}
-            </div>
 
             <Label>{t('preview')}</Label>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -435,10 +420,6 @@ export const GroupEditModal = ({
 
             <Label>{t('icon')}</Label>
             <IconPicker value={draft.icon} color={draft.color} onChange={(icon) => setDraft({ ...draft, icon })} />
-
-            <div style={{ color: C.faint, fontSize: '0.7rem', marginTop: '0.9rem' }}>
-{t('groupDeleteHelp')}
-            </div>
         </Modal>
     );
 };

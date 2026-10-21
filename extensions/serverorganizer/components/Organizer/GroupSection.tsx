@@ -1,16 +1,18 @@
 import React from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faChevronDown, faChevronRight, faGripVertical, faPen, faSync } from '@fortawesome/free-solid-svg-icons';
-import { Server } from '@/api/server/getServer';
+import { faChevronDown, faChevronRight, faGripVertical, faPen } from '@fortawesome/free-solid-svg-icons';
 import { OrganizerGroup, ServerPref } from './types';
 import { resolveIcon } from './icons';
 import { C } from './ui';
 import { useT } from './i18n';
 import ServerCard from './ServerCard';
+import PairCard from './PairCard';
+import { LiveState, Unit, isChainable } from './pairs';
 
 interface Props {
     group: OrganizerGroup | null;
-    servers: Server[];
+    units: Unit[];
+    states: Record<string, LiveState>;
     prefFor: (uuid: string) => ServerPref;
     editMode: boolean;
     showHeader: boolean;
@@ -21,9 +23,7 @@ interface Props {
 
     onToggleCollapse: () => void;
     onEditGroup: () => void;
-    /** Van-e a csoportban elsodleges vagy backup szerep kiosztva. */
-    canRestartChain: boolean;
-    onRestartChain: () => void;
+    onRestartUnit: (unit: Unit) => void;
     onEditServer: (uuid: string) => void;
 
     onServerDragStart: (uuid: string) => void;
@@ -40,7 +40,8 @@ interface Props {
 
 export default ({
     group,
-    servers,
+    units,
+    states,
     prefFor,
     editMode,
     showHeader,
@@ -49,8 +50,7 @@ export default ({
     draggingGroup,
     onToggleCollapse,
     onEditGroup,
-    canRestartChain,
-    onRestartChain,
+    onRestartUnit,
     onEditServer,
     onServerDragStart,
     onServerDragEnd,
@@ -71,7 +71,7 @@ export default ({
 
     return (
         <div
-            style={{ marginBottom: '1.25rem', opacity: isGroupDragging ? 0.4 : 1 }}
+            style={{ marginBottom: '1.75rem', opacity: isGroupDragging ? 0.4 : 1 }}
             onDragOver={(e) => {
                 // Ures csoportra / a csoport ures teruletere ejtes: ide kerul a szerver.
                 if (!editMode || !draggingServer) return;
@@ -112,16 +112,16 @@ export default ({
                     style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.5rem',
-                        padding: '0.4rem 0.6rem',
-                        marginBottom: '0.6rem',
-                        borderRadius: '0.25rem',
+                        gap: '0.75rem',
+                        padding: '0.7rem 1rem',
+                        marginBottom: '0.9rem',
+                        borderRadius: '0.6rem',
                         background: C.panel,
-                        borderLeft: `3px solid ${color}`,
+                        borderLeft: `5px solid ${color}`,
                     }}
                 >
                     {editMode && group && (
-                        <span className={'so-draggable'} style={{ color: C.faint, fontSize: '0.8rem' }}>
+                        <span className={'so-draggable'} style={{ color: C.faint, fontSize: '1.1rem' }}>
                             <FontAwesomeIcon icon={faGripVertical} />
                         </span>
                     )}
@@ -132,7 +132,7 @@ export default ({
                         style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.5rem',
+                            gap: '0.7rem',
                             flex: 1,
                             minWidth: 0,
                             background: 'transparent',
@@ -145,13 +145,13 @@ export default ({
                     >
                         <FontAwesomeIcon
                             icon={collapsed ? faChevronRight : faChevronDown}
-                            style={{ color: C.faint, fontSize: '0.7rem', width: 10 }}
+                            style={{ color: C.faint, fontSize: '0.95rem', width: 14 }}
                         />
-                        {icon && <FontAwesomeIcon icon={icon} style={{ color }} />}
+                        {icon && <FontAwesomeIcon icon={icon} style={{ color, fontSize: '1.2rem' }} />}
                         <span
                             style={{
-                                fontSize: '0.85rem',
-                                fontWeight: 600,
+                                fontSize: '1.15rem',
+                                fontWeight: 800,
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 whiteSpace: 'nowrap',
@@ -159,26 +159,8 @@ export default ({
                         >
                             {group ? group.name : t('ungrouped')}
                         </span>
-                        <span style={{ color: C.faint, fontSize: '0.7rem' }}>{servers.length}</span>
+                        <span style={{ color: C.faint, fontSize: '0.95rem', fontWeight: 700 }}>{units.length}</span>
                     </button>
-
-                    {group && canRestartChain && (
-                        <button
-                            type={'button'}
-                            onClick={onRestartChain}
-                            title={t('restartGroup')}
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: C.accent,
-                                cursor: 'pointer',
-                                padding: '0 0.2rem',
-                                fontSize: '0.8rem',
-                            }}
-                        >
-                            <FontAwesomeIcon icon={faSync} />
-                        </button>
-                    )}
 
                     {editMode && group && (
                         <button
@@ -190,7 +172,8 @@ export default ({
                                 border: 'none',
                                 color: C.faint,
                                 cursor: 'pointer',
-                                padding: '0 0.2rem',
+                                padding: '0 0.4rem',
+                                fontSize: '1.1rem',
                             }}
                         >
                             <FontAwesomeIcon icon={faPen} />
@@ -201,28 +184,33 @@ export default ({
 
             {!collapsed && (
                 <div>
-                    {servers.map((server) => (
-                        <ServerCard
-                            key={server.uuid}
-                            server={server}
-                            pref={prefFor(server.uuid)}
-                            editMode={editMode}
-                            isDragging={draggingServer === server.uuid}
-                            dropPosition={dropTarget?.uuid === server.uuid ? dropTarget.position : null}
-                            onDragStart={() => onServerDragStart(server.uuid)}
-                            onDragEnd={onServerDragEnd}
-                            onDragOver={(position) => onServerDragOver(server.uuid, position)}
-                            onDrop={onServerDrop}
-                            onEdit={() => onEditServer(server.uuid)}
-                        />
-                    ))}
+                    {units.map((unit) => {
+                        const anchor = unit.anchor.uuid;
+                        const common = {
+                            pref: prefFor(anchor),
+                            editMode,
+                            isDragging: draggingServer === anchor,
+                            dropPosition: dropTarget?.uuid === anchor ? dropTarget.position : null,
+                            onDragStart: () => onServerDragStart(anchor),
+                            onDragEnd: onServerDragEnd,
+                            onDragOver: (position: 'before' | 'after') => onServerDragOver(anchor, position),
+                            onDrop: onServerDrop,
+                            onEdit: () => onEditServer(anchor),
+                        };
 
-                    {servers.length === 0 && (
+                        return isChainable(unit) ? (
+                            <PairCard key={anchor} unit={unit} states={states} onRestart={() => onRestartUnit(unit)} {...common} />
+                        ) : (
+                            <ServerCard key={anchor} server={unit.anchor} {...common} />
+                        );
+                    })}
+
+                    {units.length === 0 && (
                         <div
                             style={{
-                                padding: '0.75rem',
+                                padding: '1.25rem',
                                 textAlign: 'center',
-                                fontSize: '0.75rem',
+                                fontSize: '1rem',
                                 color: C.faint,
                                 border: `1px dashed ${C.border}`,
                                 borderRadius: '0.25rem',

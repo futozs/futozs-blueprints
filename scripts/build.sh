@@ -42,7 +42,8 @@ rm -f "$OUT"
 
 # Zip from inside the extension directory so conf.yml lands at the archive root.
 cd "$SRC" || exit 1
-zip -r -q "$OUT" . -x '*.DS_Store' -x '__MACOSX/*' -x '.dist/*' || {
+# A v2/ a 2.x-es csomag (scripts/build-v2.sh) - a Blueprint archivumba nem kerul.
+zip -r -q "$OUT" . -x '*.DS_Store' -x '__MACOSX/*' -x '.dist/*' -x 'v2/*' || {
     echo "ERROR: packaging failed"
     exit 1
 }

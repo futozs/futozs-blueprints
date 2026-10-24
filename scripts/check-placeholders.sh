@@ -22,6 +22,7 @@ FAILED=0
 for TOKEN in $TOKENS; do
     HITS=$(grep -rn \
         --include='*.tsx' --include='*.ts' --include='*.jsx' --include='*.js' \
+        --exclude-dir=node_modules --exclude-dir=v2 \
         "{${TOKEN}}" "$TARGET" 2>/dev/null || true)
 
     if [ -n "$HITS" ]; then

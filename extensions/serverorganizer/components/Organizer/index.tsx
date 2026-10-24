@@ -1,10 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolderPlus, faPen, faCheck, faSort, faEye } from '@fortawesome/free-solid-svg-icons';
-import { useStoreState } from 'easy-peasy';
-import getServers from '@/api/getServers';
-import { Server } from '@/api/server/getServer';
-import Spinner from '@/components/elements/Spinner';
+import { Server, Spinner, getServers, useHideNativeList, useIsRootAdmin } from './platform';
 
 import { getPrefs, savePrefs } from './api';
 import { OrganizerGroup, OrganizerPrefs, ServerPref, SortMode, defaultServerPref } from './types';
@@ -53,7 +50,7 @@ const SORT_KEYS: Record<SortMode, StringKey> = {
 };
 
 const Organizer = () => {
-    const rootAdmin = useStoreState((state: any) => state.user.data!.rootAdmin);
+    const rootAdmin = useIsRootAdmin();
 
     const [servers, setServers] = useState<Server[] | null>(null);
     const [prefs, setPrefs] = useState<OrganizerPrefs | null>(null);
@@ -116,15 +113,7 @@ const Organizer = () => {
      */
     const organizerActive = !loadError && (!prefs || prefs.enabled);
 
-    useEffect(() => {
-        if (organizerActive) {
-            document.body.classList.add('so-active');
-        } else {
-            document.body.classList.remove('so-active');
-        }
-
-        return () => document.body.classList.remove('so-active');
-    }, [organizerActive]);
+    useHideNativeList(organizerActive);
 
     useEffect(
         () => () => {

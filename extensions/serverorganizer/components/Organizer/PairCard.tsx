@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGripVertical, faPen, faRedo } from '@fortawesome/free-solid-svg-icons';
-import { Server } from '@/api/server/getServer';
-import { bytesToString, ip, mbToBytes } from '@/lib/formatters';
+import { Server, ServerLink, bytesToString, ip, mbToBytes } from './platform';
 import { ServerPref } from './types';
 import { resolveIcon } from './icons';
 import { C, MONO, bigBtn } from './ui';
@@ -46,7 +44,7 @@ const ServerLine = ({ server, role, info }: { server: Server; role: 'primary' | 
     const limits = server.limits;
 
     return (
-        <Link to={`/server/${server.id}`} className={'so-pair-row'}>
+        <ServerLink server={server} className={'so-pair-row'}>
             <span style={{ fontSize: '0.72rem', fontWeight: 600, letterSpacing: '0.08em', color: role === 'primary' ? C.primary : C.backup }}>
                 {role === 'primary' ? 'PRIMARY' : 'BACKUP'}
             </span>
@@ -71,7 +69,7 @@ const ServerLine = ({ server, role, info }: { server: Server; role: 'primary' | 
                 value={info && info.state !== 'unknown' ? bytesToString(info.disk) : '–'}
                 limit={limits.disk ? bytesToString(mbToBytes(limits.disk)) : null}
             />
-        </Link>
+        </ServerLink>
     );
 };
 

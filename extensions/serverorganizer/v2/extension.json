@@ -1,0 +1,23 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "serverorganizer",
+    "name": "Server Organizer",
+    "version": "4.2.0",
+    "description": "Csoportok, szinek, primary/backup parkartyak elo allapottal, es egygombos ujrainditas: elobb a primary, utana a backup.",
+    "author": "Futó Zsombor",
+    "icon": "layout-grid",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.6 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "FutoZs\\ServerOrganizer\\ServerOrganizerProvider",
+    "autoload": {
+        "FutoZs\\ServerOrganizer\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "views": ["dashboard.serverList"]
+    }
+}

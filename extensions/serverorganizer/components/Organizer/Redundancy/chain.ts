@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import http from '@/api/http';
-import getWebsocketToken from '@/api/server/getWebsocketToken';
-import { Websocket } from '@/plugins/Websocket';
-import { Server } from '@/api/server/getServer';
+import { Server, Websocket, getWebsocketToken, http } from '../platform';
 import { ChainState, ConsoleLine, FailureKind, Live, StepState } from './types';
 import { classify, messageOf } from './startsh';
 

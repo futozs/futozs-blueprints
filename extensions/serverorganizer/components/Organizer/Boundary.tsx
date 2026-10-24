@@ -1,4 +1,5 @@
 import React from 'react';
+import { restoreNativeList } from './platform';
 
 interface State {
     failed: boolean;
@@ -26,11 +27,7 @@ export default class OrganizerBoundary extends React.Component<{ children: React
         // eslint-disable-next-line no-console
         console.error('[ServerOrganizer] hiba - visszaall az alapertelmezett szerverlista', error, info);
 
-        try {
-            document.body.classList.remove('so-active');
-        } catch (removalError) {
-            /* ha meg ez sem megy, mar ugysem tudunk mit tenni */
-        }
+        restoreNativeList();
     }
 
     render() {

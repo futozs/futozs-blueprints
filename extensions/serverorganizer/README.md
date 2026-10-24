@@ -3,6 +3,9 @@
 Turns the flat server list on the Pterodactyl client dashboard into something you can actually
 organise: groups, colours, icons, drag & drop ordering, and primary/backup markers.
 
+Works on **Pterodactyl 1.x** (Blueprint) and **Pterodactyl 2.x** (native extension) — one source,
+two packages, the same features and the same stored settings.
+
 Every user organises their own dashboard — there is no central admin configuration to maintain.
 The interface is available in **English and Hungarian**, picked from your browser language and
 overridable in the toolbar.
@@ -21,8 +24,9 @@ overridable in the toolbar.
 - **One-button restart** — full-screen view: primary first, the backup only after the primary is
   genuinely serving again. See below.
 
-The extension reuses Pterodactyl's own `ServerRow` component instead of reimplementing it, so live
-CPU / RAM / disk readings and everything else keep working exactly as before.
+The extension reuses the panel's own server row instead of reimplementing it — `ServerRow` on 1.x,
+the `dashboard.serverCard` view on 2.x — so live CPU / RAM / disk readings and everything else keep
+working exactly as before.
 
 ## Pairs are detected, not configured
 
@@ -70,6 +74,30 @@ bash install.sh serverorganizer
 
 See the [repository README](../../README.md) for the full instructions.
 
+## One source, two panels
+
+```
+conf.yml, app/, client.php, migrations/   1.x Blueprint package
+components/Organizer/                     the UI - shared by both packages
+components/Organizer/platform.tsx         1.x platform layer (panel internals, Blueprint)
+v2/                                       2.x native extension
+v2/src/client/platform.tsx                2.x platform layer (@pterodactyl/sdk)
+```
+
+The shared UI touches the panel only through `./platform`. Both platform files export the same
+names: the HTTP client, the server list and resource calls, the console websocket, the panel's own
+server row and link, formatters, and hiding / restoring the panel's native list. Add something to one
+and you must add it to the other.
+
+On 2.x, `v2/scripts/sync-shared.mjs` copies `components/Organizer` and `styles.css` into
+`v2/.shared/` and points `platform.tsx` at the 2.x layer before every build, typecheck and test. The
+extension overrides the `dashboard.serverList` view: the organiser is drawn first, and the panel's own
+list (`Default`) only when the organiser is switched off or fails, exactly as on 1.x.
+
+The 2.x backend (`v2/src`, `v2/routes/client.php`) serves the same two endpoints at the same URLs
+as the 1.x Blueprint router, and `v2/database/migrations` carries the same migration under the same
+file name: on a panel upgraded from 1.x it is already recorded and the existing table is reused.
+
 ## How your data is stored
 
 Settings live in a dedicated `serverorganizer_prefs` table — one row per user, holding a JSON
@@ -90,7 +118,8 @@ Saved documents are validated server-side — shape, field lengths and allowed v
 
 ```bash
 cd /var/www/pterodactyl
-blueprint -remove serverorganizer
+blueprint -remove serverorganizer                                   # 1.x
+sudo -u www-data php artisan p:extension:remove serverorganizer     # 2.x
 ```
 
 The `serverorganizer_prefs` table is deliberately left in place so your arrangement survives a
@@ -98,9 +127,9 @@ reinstall. Drop it manually if you want it gone for good.
 
 ## Known limitations
 
-- The organiser hides everything that renders after it on the dashboard — that is how it replaces
-  the default list. If another extension adds content below the server list, that content will not
-  be visible while the organiser is enabled.
+- 1.x: the organiser hides everything that renders after it on the dashboard — that is how it
+  replaces the default list. If another extension adds content below the server list, that content
+  will not be visible while the organiser is enabled. (2.x replaces only the server list view.)
 - The live state is polled every 15 seconds for the sort order and the pair badges.
 
 ## Upgrading from 3.x

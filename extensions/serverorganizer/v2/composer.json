@@ -1,0 +1,12 @@
+{
+    "name": "futozs/serverorganizer",
+    "description": "Server Organizer - Pterodactyl 2.x extension",
+    "autoload": {
+        "psr-4": {
+            "FutoZs\\ServerOrganizer\\": "src/"
+        }
+    },
+    "config": {
+        "autoloader-suffix": "FutoZsServerOrganizerExtension"
+    }
+}

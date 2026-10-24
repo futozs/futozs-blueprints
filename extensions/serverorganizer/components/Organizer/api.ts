@@ -1,4 +1,4 @@
-import http from '@/api/http';
+import { http } from './platform';
 import { OrganizerPrefs, defaultPrefs, PREFS_VERSION } from './types';
 
 const ENDPOINT = '/api/client/extensions/serverorganizer/prefs';

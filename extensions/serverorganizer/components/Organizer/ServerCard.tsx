@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faGripVertical, faPen } from '@fortawesome/free-solid-svg-icons';
-import ServerRow from '@/components/dashboard/ServerRow';
-import { Server } from '@/api/server/getServer';
+import { Server, ServerRow } from './platform';
 import { ServerPref } from './types';
 import { resolveIcon } from './icons';
 import { C } from './ui';

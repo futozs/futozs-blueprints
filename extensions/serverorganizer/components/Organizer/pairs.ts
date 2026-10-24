@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Server } from '@/api/server/getServer';
-import getServerResourceUsage, { ServerPowerState } from '@/api/server/getServerResourceUsage';
+import { Server, ServerPowerState, getServerResourceUsage } from './platform';
 import { ServerRole } from './types';
 
 /**

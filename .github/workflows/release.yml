@@ -38,14 +38,43 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Releasing ${NAME} v${VERSION}"
 
-      - name: Build
+          if [ -f "extensions/${NAME}/v2/extension.json" ]; then
+            echo "v2=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build (Pterodactyl 1.x, Blueprint)
         run: |
           chmod +x scripts/*.sh
           scripts/build.sh "${{ steps.resolve.outputs.name }}" dist
+
+      # A 2.x-es csomag az SDK-t a panel forrasabol kapja (npm-en nincs fent).
+      - uses: actions/setup-node@v4
+        if: steps.resolve.outputs.v2 == 'true'
+        with:
+          node-version: 22
+
+      - uses: actions/checkout@v4
+        if: steps.resolve.outputs.v2 == 'true'
+        with:
+          repository: pterodactyl/panel
+          ref: v2.0.0-beta.2
+          path: .panel-src
+
+      - name: Prepare panel SDK
+        if: steps.resolve.outputs.v2 == 'true'
+        working-directory: .panel-src
+        run: npm ci --no-audit --no-fund && npm run sdk:testing
+
+      - name: Build (Pterodactyl 2.x, native extension)
+        if: steps.resolve.outputs.v2 == 'true'
+        run: PANEL_SRC="$GITHUB_WORKSPACE/.panel-src" scripts/build-v2.sh "${{ steps.resolve.outputs.name }}" dist
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           name: "${{ steps.resolve.outputs.name }} v${{ steps.resolve.outputs.version }}"
-          files: dist/${{ steps.resolve.outputs.name }}.blueprint
+          files: |
+            dist/${{ steps.resolve.outputs.name }}.blueprint
+            dist/${{ steps.resolve.outputs.name }}.pteroext
+          fail_on_unmatched_files: false
           generate_release_notes: true

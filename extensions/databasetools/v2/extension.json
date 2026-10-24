@@ -1,0 +1,23 @@
+{
+    "$schema": "./node_modules/@pterodactyl/sdk/manifest.schema.json",
+    "id": "databasetools",
+    "name": "Database Tools",
+    "version": "1.0.0",
+    "description": "Adatbazis import (SQL fajlbol vagy tavoli MySQL/MariaDB-bol), export, uritese es meret a szerver Databases oldalan.",
+    "author": "Futó Zsombor",
+    "icon": "database",
+    "requires": {
+        "panel": "^2.0.0-dev",
+        "sdk": ">=2.0.0-beta.6 <3.0",
+        "php": "^8.3"
+    },
+    "provider": "FutoZs\\DatabaseTools\\DatabaseToolsProvider",
+    "autoload": {
+        "FutoZs\\DatabaseTools\\": "src"
+    },
+    "ui": {
+        "entry": "dist/client.js",
+        "mode": "native",
+        "views": ["server.databases"]
+    }
+}

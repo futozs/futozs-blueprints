@@ -26,9 +26,12 @@ command -v zip >/dev/null 2>&1 || { echo "ERROR: 'zip' is required."; exit 1; }
 command -v npm >/dev/null 2>&1 || { echo "ERROR: 'npm' (Node 22) is required."; exit 1; }
 
 # A ket csomag verzioja mindig egyezzen: egy kiadas = egy verzio, 1.x-en es 2.x-en.
-V1=$(grep -oE 'version: *"[^"]+"' "$REPO_ROOT/extensions/$NAME/conf.yml" | head -1 | cut -d'"' -f2)
+# (Csak 2.x-es kiegeszitonek nincs conf.yml-je - ott az extension.json a forras.)
 V2=$(grep -oE '"version": *"[^"]+"' "$SRC/extension.json" | head -1 | cut -d'"' -f4)
-[ "$V1" = "$V2" ] || { echo "ERROR: conf.yml says $V1 but v2/extension.json says $V2"; exit 1; }
+if [ -f "$REPO_ROOT/extensions/$NAME/conf.yml" ]; then
+    V1=$(grep -oE 'version: *"[^"]+"' "$REPO_ROOT/extensions/$NAME/conf.yml" | head -1 | cut -d'"' -f2)
+    [ "$V1" = "$V2" ] || { echo "ERROR: conf.yml says $V1 but v2/extension.json says $V2"; exit 1; }
+fi
 
 if [ -n "${PANEL_SRC:-}" ]; then
     ln -sfn "$(cd "$PANEL_SRC" && pwd)" "$SRC/.panel"

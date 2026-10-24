@@ -1,0 +1,12 @@
+{
+    "name": "futozs/databasetools",
+    "description": "Database Tools - Pterodactyl 2.x extension",
+    "autoload": {
+        "psr-4": {
+            "FutoZs\\DatabaseTools\\": "src/"
+        }
+    },
+    "config": {
+        "autoloader-suffix": "FutoZsDatabaseToolsExtension"
+    }
+}

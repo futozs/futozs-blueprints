@@ -10,6 +10,7 @@ independently, so installing one never drags in the others.
 
 | Extension | Description |
 |---|---|
+| [databasetools](extensions/databasetools) | **2.x only.** Import (SQL file or a remote MySQL/MariaDB database), export, clear and size for every server database, right in the panel's Databases page. |
 | [serverorganizer](extensions/serverorganizer) | Groups, colours, icons and drag & drop ordering for the client dashboard; primary/backup pairs detected automatically and shown on one card with live state; one-button full-screen restart (primary first, then backup). English and Hungarian UI. |
 
 ## Installing

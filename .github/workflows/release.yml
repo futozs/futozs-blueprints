@@ -28,9 +28,17 @@ jobs:
             exit 1
           fi
 
-          CONF_VERSION=$(grep -oE 'version: *"[^"]+"' "extensions/${NAME}/conf.yml" | head -1 | cut -d'"' -f2)
+          # 1.x-es csomagnal a conf.yml, csak 2.x-esnel a v2/extension.json a verzio forrasa.
+          if [ -f "extensions/${NAME}/conf.yml" ]; then
+            CONF="extensions/${NAME}/conf.yml"
+            CONF_VERSION=$(grep -oE 'version: *"[^"]+"' "$CONF" | head -1 | cut -d'"' -f2)
+            echo "v1=true" >> "$GITHUB_OUTPUT"
+          else
+            CONF="extensions/${NAME}/v2/extension.json"
+            CONF_VERSION=$(grep -oE '"version": *"[^"]+"' "$CONF" | head -1 | cut -d'"' -f4)
+          fi
           if [ "$CONF_VERSION" != "$VERSION" ]; then
-            echo "::error::Tag says v${VERSION} but extensions/${NAME}/conf.yml says ${CONF_VERSION}. Bump conf.yml first."
+            echo "::error::Tag says v${VERSION} but ${CONF} says ${CONF_VERSION}. Bump it first."
             exit 1
           fi
 
@@ -43,6 +51,7 @@ jobs:
           fi
 
       - name: Build (Pterodactyl 1.x, Blueprint)
+        if: steps.resolve.outputs.v1 == 'true'
         run: |
           chmod +x scripts/*.sh
           scripts/build.sh "${{ steps.resolve.outputs.name }}" dist
@@ -67,7 +76,9 @@ jobs:
 
       - name: Build (Pterodactyl 2.x, native extension)
         if: steps.resolve.outputs.v2 == 'true'
-        run: PANEL_SRC="$GITHUB_WORKSPACE/.panel-src" scripts/build-v2.sh "${{ steps.resolve.outputs.name }}" dist
+        run: |
+          chmod +x scripts/*.sh
+          PANEL_SRC="$GITHUB_WORKSPACE/.panel-src" scripts/build-v2.sh "${{ steps.resolve.outputs.name }}" dist
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
